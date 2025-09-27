@@ -21,20 +21,6 @@ const Chat = () => {
     setIsLoading(true);
 
     try {
-      // Simulate API call
-      // setTimeout(() => {
-      //   const assistantMessage = {
-      //     id: (Date.now() + 1).toString(),
-      //     role: 'assistant',
-      //     content: `This is a response to your message: "${message}"`,
-      //     timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
-      //   };
-        
-      //   setMessages(prev => [...prev, assistantMessage]);
-      //   setIsLoading(false);
-      // }, 1500);
-      
-      // Uncomment for real API call
       
       const response = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',

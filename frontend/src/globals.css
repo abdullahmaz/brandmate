@@ -200,4 +200,16 @@ html {
   .chat-input {
     @apply flex items-center gap-2 bg-background rounded-lg border border-border p-2;
   }
+  
+  .loading-dot-1 {
+    animation-delay: -0.3s;
+  }
+  
+  .loading-dot-2 {
+    animation-delay: -0.15s;
+  }
+  
+  .loading-dot-3 {
+    animation-delay: 0s;
+  }
 }

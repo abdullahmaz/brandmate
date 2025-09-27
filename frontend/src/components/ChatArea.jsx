@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
+import { Spinner } from './ui/spinner';
 
 /**
  * @typedef {Object} Message
@@ -68,10 +69,9 @@ export function ChatArea({ messages, isLoading }) {
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-foreground">Assistant</span>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce"></div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-sm">Thinking</span>
+                <Spinner variant="ellipsis" size={16} className="text-primary" />
               </div>
             </div>
           </div>
