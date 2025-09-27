@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #F6F8F5;
+  --foreground: #2E3B2C;
+  --card: #ffffff;
+  --card-foreground: #2E3B2C;
+  --popover: #ffffff;
+  --popover-foreground: #2E3B2C;
+  --primary: #536C4D;
+  --primary-foreground: #F6F8F5;
+  --secondary: #E9F0E8;
+  --secondary-foreground: #2E3B2C;
+  --muted: #D5E0D2;
+  --muted-foreground: #688661;
+  --accent: #BFCFBB;
+  --accent-foreground: #2E3B2C;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: #D5E0D2;
+  --input: transparent;
+  --input-background: #ffffff;
+  --switch-background: #BFCFBB;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #89A583;
+  --chart-1: #89A583;
+  --chart-2: #688661;
+  --chart-3: #536C4D;
+  --chart-4: #BFCFBB;
+  --chart-5: #D5E0D2;
+  --radius: 0.625rem;
+  --sidebar: #E9F0E8;
+  --sidebar-foreground: #2E3B2C;
+  --sidebar-primary: #536C4D;
+  --sidebar-primary-foreground: #F6F8F5;
+  --sidebar-accent: #D5E0D2;
+  --sidebar-accent-foreground: #2E3B2C;
+  --sidebar-border: #D5E0D2;
+  --sidebar-ring: #89A583;
+}
+
+.dark {
+  --background: #2E3B2C;
+  --foreground: #F6F8F5;
+  --card: #394635;
+  --card-foreground: #F6F8F5;
+  --popover: #394635;
+  --popover-foreground: #F6F8F5;
+  --primary: #89A583;
+  --primary-foreground: #2E3B2C;
+  --secondary: #43573E;
+  --secondary-foreground: #F6F8F5;
+  --muted: #536C4D;
+  --muted-foreground: #BFCFBB;
+  --accent: #688661;
+  --accent-foreground: #F6F8F5;
+  --destructive: #d4183d;
+  --destructive-foreground: #F6F8F5;
+  --border: #536C4D;
+  --input: #43573E;
+  --ring: #89A583;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: #89A583;
+  --chart-2: #688661;
+  --chart-3: #536C4D;
+  --chart-4: #BFCFBB;
+  --chart-5: #D5E0D2;
+  --sidebar: #394635;
+  --sidebar-foreground: #F6F8F5;
+  --sidebar-primary: #89A583;
+  --sidebar-primary-foreground: #2E3B2C;
+  --sidebar-accent: #43573E;
+  --sidebar-accent-foreground: #F6F8F5;
+  --sidebar-border: #536C4D;
+  --sidebar-ring: #89A583;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+/* Custom classes for the chat interface */
+@layer components {
+  .sidebar {
+    @apply bg-sidebar text-sidebar-foreground border-r border-sidebar-border h-screen transition-all duration-300 ease-in-out;
+  }
+  
+  .sidebar-collapsed {
+    @apply w-16;
+  }
+  
+  .sidebar-expanded {
+    @apply w-64;
+  }
+  
+  .conversation-item {
+    @apply flex items-center p-2 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer transition-colors;
+  }
+  
+  .conversation-item-active {
+    @apply bg-sidebar-primary text-sidebar-primary-foreground;
+  }
+  
+  .chat-container {
+    @apply flex flex-col h-screen bg-background;
+  }
+  
+  .chat-header {
+    @apply bg-card text-card-foreground p-4 border-b border-border flex items-center justify-between;
+  }
+  
+  .chat-messages {
+    @apply flex-1 overflow-y-auto p-4 space-y-4;
+  }
+  
+  .message-user {
+    @apply bg-primary text-primary-foreground p-3 rounded-xl rounded-tr-sm max-w-[80%] ml-auto;
+  }
+  
+  .message-assistant {
+    @apply bg-card text-card-foreground p-3 rounded-xl rounded-tl-sm max-w-[80%] mr-auto border border-border;
+  }
+  
+  .chat-input-container {
+    @apply p-4 border-t border-border bg-card;
+  }
+  
+  .chat-input {
+    @apply flex items-center gap-2 bg-background rounded-lg border border-border p-2;
+  }
+}

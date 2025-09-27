@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+python-multipart
+requests
+transformers
+torch
+torchvision
+diffusers
+pillow
+python-dotenv
+pydantic
+accelerate
+sentencepiece
+protobuf
+kernels
+nvidia-ml-py3
+triton
