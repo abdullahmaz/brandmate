@@ -1,22 +1,68 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatArea } from './ChatArea';
 import { ChatInput } from './ChatInput';
 import { formatDistanceToNow } from 'date-fns';
-import { useChat, useSendMessage } from '../hooks/useChat';
+import { useChat, useCreateChat } from '../hooks/useChat';
+import { api } from '../services/api';
+import { queryKeys } from '../types/api';
 import { MessageRole } from '../types/api';
 
 const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [optimisticMessages, setOptimisticMessages] = useState([]);
   const [localMessages, setLocalMessages] = useState([]);
   
   // Only load chat data if we have a chatId and no local messages
   const { data: chatData, isLoading: chatLoading } = useChat(chatId);
   
-  // Send message mutation
-  const sendMessageMutation = useSendMessage();
+  // Send message mutation with custom onSuccess handler
+  const sendMessageMutation = useMutation({
+    mutationFn: ({ chatId, data }) => api.sendMessage(chatId, data),
+    onSuccess: (response, variables) => {
+      const { chatId } = variables;
+      
+      // Add assistant response to local state
+      const assistantMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: response.data.message,
+        message_type: response.data.tool !== 'conversation' ? response.data.tool : 'text',
+        s3_url: response.data.image,
+        tool: response.data.tool,
+        image: response.data.image,
+        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
+      };
+      
+      setLocalMessages(prev => [...prev, assistantMessage]);
+      
+      // Invalidate chat data to refresh messages
+      if (chatId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.chats });
+      }
+    },
+    onError: (error) => {
+      console.error('Failed to send message:', error);
+      
+      // Add error message to local state
+      const errorMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: 'Sorry, there was an error processing your request. Please try again.',
+        message_type: 'text',
+        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
+      };
+      
+      setLocalMessages(prev => [...prev, errorMessage]);
+    },
+  });
+  
+  // Create chat mutation
+  const createChatMutation = useCreateChat();
   
   // Convert API messages to UI format and merge with local state
   const messages = React.useMemo(() => {
@@ -56,28 +102,17 @@ const Chat = () => {
   }, [chatData?.messages, optimisticMessages, localMessages]);
   
   const handleSendMessage = async (message) => {
-    if (!message.trim() || sendMessageMutation.isPending) return;
+    if (!message.trim() || sendMessageMutation.isPending || createChatMutation.isPending) return;
 
     // If no chatId, create a new chat first
     if (!chatId) {
       try {
-        // Create new chat
-        const response = await fetch('http://localhost:8000/api/chats', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: message.length > 50 ? message.substring(0, 50) + '...' : message
-          })
+        // Create new chat using the mutation hook
+        const chatData = await createChatMutation.mutateAsync({
+          title: message.length > 50 ? message.substring(0, 50) + '...' : message
         });
         
-        if (!response.ok) {
-          throw new Error('Failed to create chat');
-        }
-        
-        const chatData = await response.json();
-        const newChatId = chatData.chat_id;
+        const newChatId = chatData.data.chat_id;
         
         // Navigate to the new chat
         navigate(`/chat/${newChatId}`);
@@ -93,11 +128,20 @@ const Chat = () => {
         
         setLocalMessages([userMessage]);
         
-        // Send the message to the new chat
-        await sendMessageToChat(newChatId, message, [userMessage]);
+        // Send the message to the new chat using the mutation
+        sendMessageMutation.mutate({
+          chatId: newChatId,
+          data: {
+            message,
+            conversation_history: [userMessage].map(msg => ({
+              role: msg.role,
+              content: msg.content
+            }))
+          }
+        });
         
       } catch (error) {
-        console.error('Error creating chat:', error);
+        console.error('Error creating chat or sending message:', error);
         // Add error message to local state
         const errorMessage = {
           id: `error-${Date.now()}`,
@@ -111,88 +155,57 @@ const Chat = () => {
       }
     } else {
       // Chat exists, send message normally
-      await sendMessageToChat(chatId, message, messages);
-    }
-  };
+      try {
+        // Add user message to local state immediately
+        const userMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: message,
+          message_type: 'text',
+          timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
+        };
+        
+        setLocalMessages(prev => [...prev, userMessage]);
 
-  const sendMessageToChat = async (currentChatId, message, conversationHistory) => {
-    try {
-      // Add user message to local state immediately
-      const userMessage = {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: message,
-        message_type: 'text',
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
-      };
-      
-      setLocalMessages(prev => [...prev, userMessage]);
+        // Prepare conversation history for the API
+        const history = messages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
 
-      // Prepare conversation history for the API
-      const history = conversationHistory.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
-
-      // Send message to existing chat
-      const response = await fetch(`http://localhost:8000/api/chats/${currentChatId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          conversation_history: history
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to send message');
+        // Send message using the mutation
+        sendMessageMutation.mutate({
+          chatId: chatId,
+          data: {
+            message,
+            conversation_history: history
+          }
+        });
+        
+      } catch (error) {
+        console.error('Error sending message:', error);
+        
+        // Add error message to local state
+        const errorMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: 'Sorry, there was an error processing your request. Please try again.',
+          message_type: 'text',
+          timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
+        };
+        
+        setLocalMessages(prev => [...prev, errorMessage]);
       }
-      
-      const responseData = await response.json();
-      
-      // Add assistant response to local state
-      const assistantMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: responseData.message,
-        message_type: responseData.tool !== 'conversation' ? responseData.tool : 'text',
-        s3_url: responseData.image,
-        tool: responseData.tool,
-        image: responseData.image,
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
-      };
-      
-      setLocalMessages(prev => [...prev, assistantMessage]);
-      
-    } catch (error) {
-      console.error('Error sending message:', error);
-      
-      // Add error message to local state
-      const errorMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: 'Sorry, there was an error processing your request. Please try again.',
-        message_type: 'text',
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
-      };
-      
-      setLocalMessages(prev => [...prev, errorMessage]);
-      
-      // Clear error message after delay
-      setTimeout(() => {
-        setLocalMessages(prev => prev.filter(msg => msg.id !== errorMessage.id));
-      }, 3000);
     }
   };
+
 
   const handleStop = () => {
     // Implement stop functionality
     sendMessageMutation.reset();
   };
 
-  const isLoading = sendMessageMutation.isPending || chatLoading;
+  const isLoading = sendMessageMutation.isPending || createChatMutation.isPending || chatLoading;
 
   // Show welcome message when no chat is selected
   if (!chatId) {
