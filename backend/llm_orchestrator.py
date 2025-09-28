@@ -127,20 +127,20 @@ class LLMOrchestrator:
             }
         ]
     
-    async def process_request(self, user_message: str) -> Dict[str, Any]:
+    async def process_request(self, user_message: str, conversation_history: list = None) -> Dict[str, Any]:
         """
-        Process user request using Llama 3.2 with tool calling
-        This acts as a generic LLM that can both reason and call tools
+        Process user request using Llama 3.2 with tool calling and conversation history
+        This follows the Hugging Face Conversations approach
         """
         if not self.model_loaded:
-            return self._fallback_response(user_message)
+            return self._fallback_response(user_message, conversation_history)
         
         try:
-            # Create conversation with system context for Llama 3.2
-            system_prompt = self._create_system_prompt()
-            user_prompt = f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            # Build conversation following HF format
+            conversation = self._build_conversation(user_message, conversation_history)
             
-            full_prompt = system_prompt + user_prompt
+            # Convert conversation to Llama 3.2 format
+            full_prompt = self._conversation_to_llama_format(conversation)
             
             # Use the pipeline for generation with tool calling
             response = self.pipe(
@@ -161,6 +161,10 @@ class LLMOrchestrator:
             print(f"DEBUG: LLM Response: {llm_response}")
             print(f"DEBUG: Extracted tool call: {tool_call}")
             
+            # Add assistant response to conversation (clean version without tool calls)
+            clean_response = self._clean_response_for_conversation(llm_response)
+            conversation.append({"role": "assistant", "content": clean_response})
+            
             if tool_call:
                 print(f"DEBUG: Tool call detected: {tool_call['name']} with parameters: {tool_call['parameters']}")
                 return {
@@ -168,19 +172,104 @@ class LLMOrchestrator:
                     "tool": tool_call["name"],
                     "parameters": tool_call["parameters"],
                     "response": llm_response,
-                    "reasoning": f"LLM decided to call {tool_call['name']} tool"
+                    "reasoning": f"LLM decided to call {tool_call['name']} tool",
+                    "conversation_history": conversation
                 }
             else:
                 print("DEBUG: No tool call detected, treating as conversation")
                 return {
                     "type": "conversation",
                     "response": llm_response,
-                    "reasoning": "LLM provided conversational response"
+                    "reasoning": "LLM provided conversational response",
+                    "conversation_history": conversation
                 }
                 
         except Exception as e:
             print(f"Error with Llama 3.2: {e}")
-            return self._fallback_response(user_message)
+            return self._fallback_response(user_message, conversation_history)
+    
+    def _build_conversation(self, user_message: str, conversation_history: list = None) -> list:
+        """
+        Build conversation following Hugging Face format
+        """
+        conversation = []
+        
+        # Add system message
+        conversation.append({
+            "role": "system", 
+            "content": self._create_system_content()
+        })
+        
+        # Add conversation history if provided
+        if conversation_history:
+            # Filter out system messages from history (we handle system separately)
+            for msg in conversation_history:
+                if msg.get("role") != "system":
+                    conversation.append(msg)
+        
+        # Add current user message
+        conversation.append({
+            "role": "user",
+            "content": user_message
+        })
+        
+        return conversation
+    
+    def _conversation_to_llama_format(self, conversation: list) -> str:
+        """
+        Convert Hugging Face conversation format to Llama 3.2 format
+        """
+        llama_prompt = "<|begin_of_text|>"
+        
+        for message in conversation:
+            role = message["role"]
+            content = message["content"]
+            
+            if role == "system":
+                llama_prompt += f"<|start_header_id|>system<|end_header_id|>\n\n{content}<|eot_id|>"
+            elif role == "user":
+                llama_prompt += f"<|start_header_id|>user<|end_header_id|>\n\n{content}<|eot_id|>"
+            elif role == "assistant":
+                llama_prompt += f"<|start_header_id|>assistant<|end_header_id|>\n\n{content}<|eot_id|>"
+        
+        # Add assistant header for response
+        llama_prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        
+        return llama_prompt
+    
+    def _create_system_content(self) -> str:
+        """
+        Create system content for conversation (without Llama formatting)
+        """
+        tools_json = json.dumps(self.tools, indent=2)
+        
+        return f"""You are Brandmate, an AI assistant specialized in Eastern clothing brand marketing. You can help users with various marketing tasks and have access to specialized tools.
+
+Available tools:
+{tools_json}
+
+You can:
+1. Have natural conversations about Eastern clothing brands, marketing strategies, and fashion
+2. Call tools when users need specific content generated
+3. Provide advice, suggestions, and creative ideas
+4. Help with brand strategy and marketing planning
+
+When a user requests content generation (images, text, videos, websites), use the appropriate tool. For general conversation, just respond naturally.
+
+IMPORTANT: When you call a tool, do it ONCE and do it correctly. Do not explain that you should have called a tool or try to correct yourself. Just call the tool directly.
+
+Tool calling format:
+<tool_call>
+{{
+    "name": "tool_name",
+    "parameters": {{
+        "param1": "value1",
+        "param2": "value2"
+    }}
+}}
+</tool_call>
+
+Be helpful, creative, and focus on Eastern clothing brand marketing expertise."""
     
     def _create_system_prompt(self) -> str:
         """
@@ -284,58 +373,103 @@ Be helpful, creative, and focus on Eastern clothing brand marketing expertise.<|
         
         return None
     
-    def _fallback_response(self, user_message: str) -> Dict[str, Any]:
+    def _clean_response_for_conversation(self, response: str) -> str:
+        """
+        Clean the LLM response for conversation history by removing tool calls
+        """
+        # Remove tool call blocks
+        import re
+        
+        # Remove <tool_call>...</tool_call> blocks
+        cleaned = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
+        
+        # Remove other tool-related tags that might appear
+        cleaned = re.sub(r'<image_generation>.*?</image_generation>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<text_generation>.*?</text_generation>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<video_generation>.*?</video_generation>', '', cleaned, flags=re.DOTALL)
+        cleaned = re.sub(r'<website_generation>.*?</website_generation>', '', cleaned, flags=re.DOTALL)
+        
+        # Clean up extra whitespace
+        cleaned = re.sub(r'\n\s*\n', '\n\n', cleaned)
+        cleaned = cleaned.strip()
+        
+        return cleaned if cleaned else "I'll help you with that request."
+    
+    def _fallback_response(self, user_message: str, conversation_history: list = None) -> Dict[str, Any]:
         """
         Fallback response when model is not available
         """
         message_lower = user_message.lower().strip()
         
+        # Build conversation for fallback
+        conversation = []
+        if conversation_history:
+            conversation.extend(conversation_history)
+        
+        # Add current user message
+        conversation.append({"role": "user", "content": user_message})
+        
         # Simple intent detection for fallback
         if any(phrase in message_lower for phrase in [
             "image", "poster", "banner", "visual", "design", "picture", "photo"
         ]):
+            response_msg = f"I'll help you create an image for: {user_message}"
+            conversation.append({"role": "assistant", "content": response_msg})
             return {
                 "type": "tool_call",
                 "tool": "image_generation",
                 "parameters": {"prompt": user_message, "style": "eastern_clothing"},
-                "response": f"I'll help you create an image for: {user_message}",
-                "reasoning": "Fallback detected image-related request"
+                "response": response_msg,
+                "reasoning": "Fallback detected image-related request",
+                "conversation_history": conversation
             }
         elif any(phrase in message_lower for phrase in [
             "text", "caption", "copy", "description", "write", "content"
         ]):
+            response_msg = f"I'll help you create text content for: {user_message}"
+            conversation.append({"role": "assistant", "content": response_msg})
             return {
                 "type": "tool_call",
                 "tool": "text_generation",
                 "parameters": {"topic": user_message, "content_type": "marketing_copy"},
-                "response": f"I'll help you create text content for: {user_message}",
-                "reasoning": "Fallback detected text-related request"
+                "response": response_msg,
+                "reasoning": "Fallback detected text-related request",
+                "conversation_history": conversation
             }
         elif any(phrase in message_lower for phrase in [
             "video", "reel", "animation", "motion", "clip"
         ]):
+            response_msg = f"I'll help you create video content for: {user_message}"
+            conversation.append({"role": "assistant", "content": response_msg})
             return {
                 "type": "tool_call",
                 "tool": "video_generation",
                 "parameters": {"description": user_message, "video_type": "promotional"},
-                "response": f"I'll help you create video content for: {user_message}",
-                "reasoning": "Fallback detected video-related request"
+                "response": response_msg,
+                "reasoning": "Fallback detected video-related request",
+                "conversation_history": conversation
             }
         elif any(phrase in message_lower for phrase in [
             "website", "landing", "page", "site", "web"
         ]):
+            response_msg = f"I'll help you create website content for: {user_message}"
+            conversation.append({"role": "assistant", "content": response_msg})
             return {
                 "type": "tool_call",
                 "tool": "website_generation",
                 "parameters": {"brand_info": user_message, "page_type": "landing"},
-                "response": f"I'll help you create website content for: {user_message}",
-                "reasoning": "Fallback detected website-related request"
+                "response": response_msg,
+                "reasoning": "Fallback detected website-related request",
+                "conversation_history": conversation
             }
         else:
+            response_msg = f"Hello! I'm Brandmate, your AI assistant for Eastern clothing brand marketing. I can help you create images, text, videos, and websites for your brand. What would you like me to help you with today?"
+            conversation.append({"role": "assistant", "content": response_msg})
             return {
                 "type": "conversation",
-                "response": f"Hello! I'm Brandmate, your AI assistant for Eastern clothing brand marketing. I can help you create images, text, videos, and websites for your brand. What would you like me to help you with today?",
-                "reasoning": "Fallback provided general greeting"
+                "response": response_msg,
+                "reasoning": "Fallback provided general greeting",
+                "conversation_history": conversation
             }
     
     # Legacy method for backward compatibility

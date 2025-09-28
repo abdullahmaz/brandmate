@@ -65,13 +65,19 @@ def initialize_components_background():
 print("Starting Brandmate server...")
 threading.Thread(target=initialize_components_background, daemon=True).start()
 
+class ChatMessage(BaseModel):
+    role: str  # "system", "user", "assistant"
+    content: str
+
 class ChatRequest(BaseModel):
     message: str
+    conversation_history: list[ChatMessage] = []
 
 class ChatResponse(BaseModel):
     message: str
     image: str | None = None
     tool: str | None = None
+    conversation_history: list[ChatMessage] = []
 
 @app.get("/")
 async def root():
@@ -142,8 +148,16 @@ async def chat(request: ChatRequest):
                 tool="limited"
             )
         
-        # Use the LLM orchestrator to process the request
-        result = await llm_orchestrator.process_request(request.message)
+        # Convert conversation history to list of dicts for LLM orchestrator
+        conversation_history = []
+        for msg in request.conversation_history:
+            conversation_history.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        # Use the LLM orchestrator to process the request with conversation history
+        result = await llm_orchestrator.process_request(request.message, conversation_history)
         
         response_message = ""
         generated_image = None
@@ -192,10 +206,20 @@ async def chat(request: ChatRequest):
             response_message = result["response"]
             tool_used = "conversation"
         
+        # Convert conversation history back to ChatMessage objects
+        updated_conversation = []
+        if "conversation_history" in result:
+            for msg in result["conversation_history"]:
+                updated_conversation.append(ChatMessage(
+                    role=msg["role"],
+                    content=msg["content"]
+                ))
+        
         return ChatResponse(
             message=response_message,
             image=generated_image,
-            tool=tool_used
+            tool=tool_used,
+            conversation_history=updated_conversation
         )
         
     except Exception as e:
