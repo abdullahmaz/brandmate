@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
-import { PlusIcon, MessageSquare, PanelLeftClose, Settings } from 'lucide-react';
+import { PlusIcon, MessageSquare, PanelLeftClose, Settings, Loader2, Trash2 } from 'lucide-react';
+import { useChats, useDeleteChat } from '../hooks/useChat';
+import { formatDistanceToNow } from 'date-fns';
 
 /**
  * @typedef {Object} Conversation
@@ -16,9 +19,6 @@ import { PlusIcon, MessageSquare, PanelLeftClose, Settings } from 'lucide-react'
  * @typedef {Object} ChatSidebarProps
  * @property {boolean} isCollapsed
  * @property {() => void} onToggle
- * @property {string|null} selectedConversationId
- * @property {(id: string) => void} onSelectConversation
- * @property {() => void} onNewConversation
  */
 
 /**
@@ -27,37 +27,43 @@ import { PlusIcon, MessageSquare, PanelLeftClose, Settings } from 'lucide-react'
  */
 export function ChatSidebar({ 
   isCollapsed, 
-  onToggle, 
-  selectedConversationId, 
-  onSelectConversation, 
-  onNewConversation 
+  onToggle
 }) {
-  const [conversations] = useState([
-    {
-      id: '1',
-      title: 'Light Sea Green Design',
-      lastMessage: 'I want a simple LLM interface like claude...',
-      timestamp: 'Just now'
-    },
-    {
-      id: '2',
-      title: 'React Components Help',
-      lastMessage: 'How to create reusable components?',
-      timestamp: '2 hours ago'
-    },
-    {
-      id: '3',
-      title: 'Tailwind CSS Tips',
-      lastMessage: 'Best practices for styling...',
-      timestamp: 'Yesterday'
-    },
-    {
-      id: '4',
-      title: 'TypeScript Questions',
-      lastMessage: 'Interface vs type definitions',
-      timestamp: '2 days ago'
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data: chats, isLoading } = useChats();
+  const deleteChatMutation = useDeleteChat();
+  const [deletingChatId, setDeletingChatId] = useState(null);
+  
+  const selectedConversationId = location.pathname.split('/').pop();
+  
+  const handleNewConversation = () => {
+    navigate('/chat');
+  };
+  
+  const handleSelectConversation = (conversationId) => {
+    navigate(`/chat/${conversationId}`);
+  };
+
+  const handleDeleteClick = async (e, conversationId) => {
+    e.stopPropagation(); // Prevent triggering the conversation selection
+    
+    setDeletingChatId(conversationId);
+    
+    try {
+      await deleteChatMutation.mutateAsync(conversationId);
+      
+      // If we're currently viewing the deleted chat, navigate to home
+      if (selectedConversationId === conversationId) {
+        navigate('/chat');
+      }
+    } catch (error) {
+      console.error('Failed to delete chat:', error);
+      // You could add a toast notification here
+    } finally {
+      setDeletingChatId(null);
     }
-  ]);
+  };
 
   if (isCollapsed) {
     return (
@@ -73,7 +79,7 @@ export function ChatSidebar({
         <Button
           variant="ghost"
           size="icon"
-          onClick={onNewConversation}
+          onClick={handleNewConversation}
           className="text-sidebar-foreground hover:bg-sidebar-accent"
         >
           <PlusIcon className="h-5 w-5" />
@@ -100,13 +106,12 @@ export function ChatSidebar({
             variant="ghost"
             size="icon"
             onClick={onToggle}
-            className="text-sidebar-foreground hover:bg-sidebar-accent"
           >
             <PanelLeftClose className="h-5 w-5" />
           </Button>
         </div>
         <Button 
-          onClick={onNewConversation}
+          onClick={handleNewConversation}
           className="w-full bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
@@ -117,32 +122,62 @@ export function ChatSidebar({
       {/* Conversations List */}
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {conversations.map((conversation) => (
-            <button
-              key={conversation.id}
-              onClick={() => onSelectConversation(conversation.id)}
-              className={`w-full p-3 rounded-lg text-left hover:bg-sidebar-accent transition-colors mb-1 ${
-                selectedConversationId === conversation.id 
-                  ? 'bg-sidebar-accent border border-sidebar-border' 
-                  : ''
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <MessageSquare className="h-4 w-4 text-sidebar-foreground/70 mt-1 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sidebar-foreground truncate mb-1">
-                    {conversation.title}
-                  </h3>
-                  <p className="text-sidebar-foreground/70 text-sm truncate">
-                    {conversation.lastMessage}
-                  </p>
-                  <p className="text-sidebar-foreground/50 text-xs mt-1">
-                    {conversation.timestamp}
-                  </p>
-                </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-sidebar-foreground/70" />
+            </div>
+          ) : chats && chats.length > 0 ? (
+            chats.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`w-full p-3 rounded-lg text-left hover:bg-sidebar-accent transition-colors mb-1 group relative ${
+                  selectedConversationId === conversation.id 
+                    ? 'bg-sidebar-accent border border-sidebar-border' 
+                    : ''
+                }`}
+              >
+                <button
+                  onClick={() => handleSelectConversation(conversation.id)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="h-4 w-4 text-sidebar-foreground/70 mt-1 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sidebar-foreground truncate mb-1">
+                        {conversation.title}
+                      </h3>
+                      <p className="text-sidebar-foreground/70 text-sm truncate">
+                        {conversation.last_message || 'No messages yet'}
+                      </p>
+                      <p className="text-sidebar-foreground/50 text-xs mt-1">
+                        {formatDistanceToNow(new Date(conversation.updated_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                
+                {/* Delete button - only show on hover */}
+                <button
+                  onClick={(e) => handleDeleteClick(e, conversation.id)}
+                  disabled={deletingChatId === conversation.id}
+                  className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Delete conversation"
+                >
+                  {deletingChatId === conversation.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </button>
               </div>
-            </button>
-          ))}
+            ))
+          ) : (
+            <div className="text-center py-8 text-sidebar-foreground/70">
+              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No conversations yet</p>
+              <p className="text-xs mt-1">Start a new conversation to get started</p>
+            </div>
+          )}
         </div>
       </ScrollArea>
 

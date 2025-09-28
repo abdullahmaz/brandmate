@@ -5,6 +5,7 @@ from typing import Optional
 import os
 from diffusers import StableDiffusionPipeline
 import torch
+import gc
 
 class ImageGenerator:
     def __init__(self):
@@ -13,12 +14,13 @@ class ImageGenerator:
         print(f"Loading local image generation model: {model_name}")
         
         try:
-            # Load the pipeline
+            # Load the pipeline with optimizations
             self.pipe = StableDiffusionPipeline.from_pretrained(
                 model_name,
                 dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 safety_checker=None,
-                requires_safety_checker=False
+                requires_safety_checker=False,
+                use_safetensors=True,  # Faster loading
             )
             
             # Move to GPU if available
@@ -30,6 +32,12 @@ class ImageGenerator:
                 print("Using CPU for image generation")
                 
             print("Image generation model loaded successfully!")
+            
+            # Enable memory optimization
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"GPU memory cleared. Available: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+                
         except Exception as e:
             print(f"Error loading image model: {e}")
             self.pipe = None
@@ -52,7 +60,7 @@ class ImageGenerator:
             with torch.no_grad():
                 image = self.pipe(
                     enhanced_prompt,
-                    num_inference_steps=20,
+                    num_inference_steps=2,
                     guidance_scale=7.5,
                     width=512,
                     height=512
@@ -60,7 +68,7 @@ class ImageGenerator:
             
             # Convert to base64 for web display
             buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
+            image.save(buffer, format='PNG', optimize=True)  # Optimize PNG compression
             img_str = base64.b64encode(buffer.getvalue()).decode()
             
             return f"data:image/png;base64,{img_str}"

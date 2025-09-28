@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from './ui/avatar';
+import { useState } from 'react';
 
 /**
  * @typedef {Object} ChatMessageProps
@@ -15,6 +16,8 @@ import { Avatar, AvatarFallback } from './ui/avatar';
  */
 export function ChatMessage({ role, content, timestamp, image, tool }) {
   const isUser = role === 'user';
+  const [imageLoading, setImageLoading] = useState(!!image);
+  const [imageError, setImageError] = useState(false);
 
   if (isUser) {
     // User messages - right aligned

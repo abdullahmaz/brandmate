@@ -7,6 +7,9 @@ import threading
 from dotenv import load_dotenv
 from llm_orchestrator import LLMOrchestrator
 from image_generator import ImageGenerator
+from database_service import database_service
+from storage_service import storage_service
+from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
 
 load_dotenv()
 
@@ -71,41 +74,208 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    chat_id: str | None = None
+    conversation_history: list[ChatMessage] = []
+
+class MessageRequest(BaseModel):
+    message: str
     conversation_history: list[ChatMessage] = []
 
 class ChatResponse(BaseModel):
     message: str
     image: str | None = None
     tool: str | None = None
+    chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
+
+async def process_message(chat_id: str, message: str, conversation_history: list[ChatMessage]) -> ChatResponse:
+    """Process a message and return response"""
+    try:
+        # Convert conversation history to list of dicts for LLM orchestrator
+        history = []
+        for msg in conversation_history:
+            history.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        
+        print(f"DEBUG: Processing message: {message}")
+        print(f"DEBUG: Conversation history length: {len(history)}")
+        for i, msg in enumerate(history):
+            print(f"DEBUG: History {i}: {msg['role']} - {msg['content'][:100]}...")
+        
+        # Use the LLM orchestrator to process the request with conversation history
+        result = await llm_orchestrator.process_request(message, history)
+        
+        response_message = ""
+        generated_image = None
+        tool_used = None
+        s3_url = None
+        
+        if result["type"] == "tool_call":
+            tool_name = result["tool"]
+            tool_used = tool_name
+            
+            if tool_name == "image_generation" and image_generator:
+                try:
+                    # Extract prompt from parameters or use the original message
+                    prompt = result["parameters"].get("prompt", message)
+                    style = result["parameters"].get("style", "eastern_clothing")
+                    
+                    # Generate image using local Stable Diffusion
+                    generated_image = await image_generator.generate_image(
+                        prompt=prompt,
+                        style=style
+                    )
+                    
+                    # Store image in S3
+                    try:
+                        print(f"DEBUG: Attempting to store image in S3...")
+                        s3_url = await storage_service.store_generated_image(generated_image, prompt)
+                        print(f"DEBUG: S3 URL generated: {s3_url}")
+                    except Exception as s3_error:
+                        print(f"S3 storage error: {s3_error}")
+                        s3_url = generated_image  # Fallback to base64
+                        print(f"DEBUG: Using fallback base64 image")
+                    
+                    response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
+                except Exception as img_error:
+                    print(f"Image generation error: {img_error}")
+                    response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
+                
+            elif tool_name == "text_generation":
+                topic = result["parameters"].get("topic", message)
+                content_type = result["parameters"].get("content_type", "marketing_copy")
+                response_message = f"I'll help you create {content_type} content about: {topic}. This feature is coming soon!"
+                
+            elif tool_name == "video_generation":
+                description = result["parameters"].get("description", message)
+                video_type = result["parameters"].get("video_type", "promotional")
+                response_message = f"I'll help you create a {video_type} video for: {description}. This feature is coming soon!"
+                
+            elif tool_name == "website_generation":
+                brand_info = result["parameters"].get("brand_info", message)
+                page_type = result["parameters"].get("page_type", "landing")
+                response_message = f"I'll help you create a {page_type} page for: {brand_info}. This feature is coming soon!"
+                
+            else:
+                response_message = result["response"]
+                
+        else:
+            # Generic conversation response
+            response_message = result["response"]
+            tool_used = "conversation"
+        
+        # Save assistant message
+        try:
+            message_type = storage_service.get_message_type_from_tool(tool_used) if tool_used != "conversation" else MessageType.TEXT
+            await database_service.create_message(MessageCreate(
+                chat_id=chat_id,
+                role=MessageRole.ASSISTANT,
+                content=response_message,
+                message_type=message_type,
+                s3_url=s3_url
+            ))
+        except Exception as db_error:
+            print(f"Database error saving assistant message: {db_error}")
+            # Continue without saving to database
+        
+        # Convert conversation history back to ChatMessage objects
+        updated_conversation = []
+        if "conversation_history" in result:
+            for msg in result["conversation_history"]:
+                updated_conversation.append(ChatMessage(
+                    role=msg["role"],
+                    content=msg["content"]
+                ))
+        
+        return ChatResponse(
+            message=response_message,
+            image=s3_url if s3_url else generated_image,
+            tool=tool_used,
+            chat_id=chat_id,
+            conversation_history=updated_conversation
+        )
+        
+    except Exception as e:
+        print(f"Error in process_message: {e}")
+        return ChatResponse(
+            message=f"Sorry, I encountered an error processing your request. Please try again with a different question.",
+            tool="error",
+            chat_id=chat_id
+        )
 
 @app.get("/")
 async def root():
     return {"message": "Brandmate API is running!"}
 
-@app.get("/health")
-async def health_check():
-    """Simple health check that doesn't depend on models"""
-    return {
-        "status": "healthy",
-        "message": "Server is running",
-        "initialization_status": initialization_status
-    }
 
-@app.get("/api/status")
-async def get_status():
-    """Get the current status of the API and its components"""
-    return {
-        "status": initialization_status,
-        "llm_available": llm_orchestrator is not None,
-        "image_generator_available": image_generator is not None,
-        "message": {
-            "starting": "Components are starting to load...",
-            "loading": "Components are still loading in the background...",
-            "ready": "All components are ready!",
-            "failed": "Some components failed to load, but basic functionality is available."
-        }.get(initialization_status, "Unknown status")
-    }
+@app.post("/api/chats", response_model=ChatResponse)
+async def create_chat(request: ChatCreate):
+    """Create a new chat"""
+    try:
+        chat = await database_service.create_chat(request)
+        return ChatResponse(
+            message="Chat created successfully",
+            tool="chat_created",
+            chat_id=chat.id
+        )
+    except Exception as e:
+        print(f"Error creating chat: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create chat")
+
+@app.post("/api/chats/{chat_id}/messages", response_model=ChatResponse)
+async def send_message(chat_id: str, request: MessageRequest):
+    """Send a message to an existing chat"""
+    try:
+        # Verify chat exists
+        chat = await database_service.get_chat(chat_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Check initialization status
+        if initialization_status == "loading":
+            return ChatResponse(
+                message="The AI models are still loading in the background. This may take several minutes on first startup. Please wait and try again in a few minutes. The server is running but the AI components need more time to initialize.",
+                tool="loading"
+            )
+        
+        # Check if any components are available
+        if not llm_orchestrator and not image_generator:
+            return ChatResponse(
+                message="Service components failed to initialize. Please check server logs for details.",
+                tool="error"
+            )
+        
+        # Save user message
+        try:
+            user_message = await database_service.create_message(MessageCreate(
+                chat_id=chat_id,
+                role=MessageRole.USER,
+                content=request.message,
+                message_type=MessageType.TEXT
+            ))
+        except Exception as db_error:
+            error_msg = str(db_error)
+            if "RLS policy" in error_msg:
+                print(f"RLS policy error: {db_error}")
+                return ChatResponse(
+                    message="Database security policy is blocking operations. Please check your Supabase RLS settings or run the disable_rls.sql script.",
+                    tool="error"
+                )
+            else:
+                print(f"Database error: {db_error}")
+                # Continue without database if it's not available
+                pass
+        
+        # Process the message
+        return await process_message(chat_id, request.message, request.conversation_history)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in send_message: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send message")
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -124,6 +294,35 @@ async def chat(request: ChatRequest):
                 tool="error"
             )
         
+        # Get or create chat
+        chat_id = request.chat_id
+        try:
+            if not chat_id:
+                # Create new chat
+                chat_data = ChatCreate(title=request.message[:50] + "..." if len(request.message) > 50 else request.message)
+                chat = await database_service.create_chat(chat_data)
+                chat_id = chat.id
+            
+            # Save user message
+            user_message = await database_service.create_message(MessageCreate(
+                chat_id=chat_id,
+                role=MessageRole.USER,
+                content=request.message,
+                message_type=MessageType.TEXT
+            ))
+        except Exception as db_error:
+            error_msg = str(db_error)
+            if "RLS policy" in error_msg:
+                print(f"RLS policy error: {db_error}")
+                return ChatResponse(
+                    message="Database security policy is blocking operations. Please check your Supabase RLS settings or run the disable_rls.sql script.",
+                    tool="error"
+                )
+            else:
+                print(f"Database error: {db_error}")
+                # Continue without database if it's not available
+                chat_id = chat_id or "temp-chat"
+        
         # If LLM is not available but image generator is, we can still handle some requests
         if not llm_orchestrator:
             # Simple fallback for image requests
@@ -134,18 +333,47 @@ async def chat(request: ChatRequest):
                             prompt=request.message,
                             style="eastern_clothing"
                         )
+                        
+                        # Store image in S3
+                        try:
+                            s3_url = await storage_service.store_generated_image(generated_image, request.message)
+                        except Exception as s3_error:
+                            print(f"S3 storage error: {s3_error}")
+                            s3_url = generated_image  # Fallback to base64
+                        
+                        # Save assistant message with image
+                        try:
+                            await database_service.create_message(MessageCreate(
+                                chat_id=chat_id,
+                                role=MessageRole.ASSISTANT,
+                                content="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
+                                message_type=MessageType.IMAGE,
+                                s3_url=s3_url
+                            ))
+                        except Exception as db_error:
+                            print(f"Database error saving fallback message: {db_error}")
+                        
                         return ChatResponse(
                             message="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
-                            image=generated_image,
-                            tool="image_generation"
+                            image=s3_url,
+                            tool="image_generation",
+                            chat_id=chat_id
                         )
                 except Exception as img_error:
                     print(f"Image generation error in fallback mode: {img_error}")
             
             # General fallback message
+            await database_service.create_message(MessageCreate(
+                chat_id=chat_id,
+                role=MessageRole.ASSISTANT,
+                content="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
+                message_type=MessageType.TEXT
+            ))
+            
             return ChatResponse(
                 message="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
-                tool="limited"
+                tool="limited",
+                chat_id=chat_id
             )
         
         # Convert conversation history to list of dicts for LLM orchestrator
@@ -162,6 +390,7 @@ async def chat(request: ChatRequest):
         response_message = ""
         generated_image = None
         tool_used = None
+        s3_url = None
         
         if result["type"] == "tool_call":
             tool_name = result["tool"]
@@ -178,6 +407,17 @@ async def chat(request: ChatRequest):
                         prompt=prompt,
                         style=style
                     )
+                    
+                    # Store image in S3
+                    try:
+                        print(f"DEBUG: Attempting to store image in S3...")
+                        s3_url = await storage_service.store_generated_image(generated_image, prompt)
+                        print(f"DEBUG: S3 URL generated: {s3_url}")
+                    except Exception as s3_error:
+                        print(f"S3 storage error: {s3_error}")
+                        s3_url = generated_image  # Fallback to base64
+                        print(f"DEBUG: Using fallback base64 image")
+                    
                     response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
                 except Exception as img_error:
                     print(f"Image generation error: {img_error}")
@@ -206,6 +446,20 @@ async def chat(request: ChatRequest):
             response_message = result["response"]
             tool_used = "conversation"
         
+        # Save assistant message
+        try:
+            message_type = storage_service.get_message_type_from_tool(tool_used) if tool_used != "conversation" else MessageType.TEXT
+            await database_service.create_message(MessageCreate(
+                chat_id=chat_id,
+                role=MessageRole.ASSISTANT,
+                content=response_message,
+                message_type=message_type,
+                s3_url=s3_url
+            ))
+        except Exception as db_error:
+            print(f"Database error saving assistant message: {db_error}")
+            # Continue without saving to database
+        
         # Convert conversation history back to ChatMessage objects
         updated_conversation = []
         if "conversation_history" in result:
@@ -217,8 +471,9 @@ async def chat(request: ChatRequest):
         
         return ChatResponse(
             message=response_message,
-            image=generated_image,
+            image=s3_url if s3_url else generated_image,
             tool=tool_used,
+            chat_id=chat_id,
             conversation_history=updated_conversation
         )
         
@@ -228,6 +483,75 @@ async def chat(request: ChatRequest):
             message=f"Sorry, I encountered an error processing your request. Please try again with a different question.",
             tool="error"
         )
+
+@app.get("/api/chats", response_model=list[Chat])
+async def get_chats(user_id: str = None, limit: int = 50):
+    """Get all chats, optionally filtered by user_id"""
+    try:
+        chats = await database_service.get_chats(user_id=user_id, limit=limit)
+        return chats
+    except Exception as e:
+        print(f"Error getting chats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve chats")
+
+@app.get("/api/chats/{chat_id}", response_model=ChatWithMessages)
+async def get_chat(chat_id: str):
+    """Get a specific chat with all its messages"""
+    try:
+        chat = await database_service.get_chat_with_messages(chat_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return chat
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting chat: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve chat")
+
+@app.get("/api/chats/{chat_id}/messages", response_model=list[MessageResponse])
+async def get_messages(chat_id: str, limit: int = 100):
+    """Get messages for a specific chat"""
+    try:
+        messages = await database_service.get_messages(chat_id, limit=limit)
+        return messages
+    except Exception as e:
+        print(f"Error getting messages: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve messages")
+
+@app.put("/api/chats/{chat_id}/title")
+async def update_chat_title(chat_id: str, title: str):
+    """Update chat title"""
+    try:
+        success = await database_service.update_chat_title(chat_id, title)
+        if not success:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        return {"message": "Chat title updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating chat title: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update chat title")
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: str):
+    """Delete a chat and all its messages"""
+    try:
+        # Verify chat exists first
+        chat = await database_service.get_chat(chat_id)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        
+        # Delete the chat and all its messages
+        success = await database_service.delete_chat(chat_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete chat")
+        
+        return {"message": "Chat deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting chat: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete chat")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

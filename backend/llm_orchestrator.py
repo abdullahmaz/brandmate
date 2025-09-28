@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Optional
 import os
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
+import gc
 
 class LLMOrchestrator:
     def __init__(self):
@@ -19,7 +20,8 @@ class LLMOrchestrator:
                 model_name,
                 dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 device_map="auto" if torch.cuda.is_available() else None,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                use_safetensors=True,    # Faster loading with safetensors
             )
             
             # Create pipeline for easier text generation
@@ -27,11 +29,18 @@ class LLMOrchestrator:
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                batch_size=1,  # Process one at a time for memory efficiency
+                return_tensors="pt"  # Return PyTorch tensors for better performance
             )
             
             print("Llama 3.2 3B Instruct loaded successfully!")
             self.model_loaded = True
+            
+            # Enable memory optimization
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print(f"GPU memory cleared. Available: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
             
         except Exception as e:
             print(f"Error loading Llama 3.2 3B Instruct: {e}")
@@ -127,7 +136,7 @@ class LLMOrchestrator:
             }
         ]
     
-    async def process_request(self, user_message: str, conversation_history: list = None) -> Dict[str, Any]:
+    async def process_request(self, user_message: str, conversation_history: list = None,) -> Dict[str, Any]:
         """
         Process user request using Llama 3.2 with tool calling and conversation history
         This follows the Hugging Face Conversations approach
@@ -357,6 +366,20 @@ Be helpful, creative, and focus on Eastern clothing brand marketing expertise.<|
                     elif "<website_generation>" in response:
                         tool_call["name"] = "website_generation"
                     print(f"DEBUG: Inferred tool name: {tool_call.get('name')}")
+                
+                # Fix tool call structure - ensure parameters are properly nested
+                if "name" in tool_call:
+                    # If parameters are at the root level, move them to a parameters object
+                    if "parameters" not in tool_call:
+                        parameters = {}
+                        for key, value in tool_call.items():
+                            if key != "name":
+                                parameters[key] = value
+                        tool_call = {
+                            "name": tool_call["name"],
+                            "parameters": parameters
+                        }
+                        print(f"DEBUG: Restructured tool call: {tool_call}")
                 
                 # Validate tool call
                 available_tools = [tool["name"] for tool in self.tools]
