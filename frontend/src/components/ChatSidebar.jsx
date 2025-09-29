@@ -1,28 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
-import { Separator } from './ui/separator';
 import { PlusIcon, MessageSquare, PanelLeftClose, Settings, Loader2, Trash2 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
 import { formatDistanceToNow } from 'date-fns';
 
 /**
- * @typedef {Object} Conversation
- * @property {string} id
- * @property {string} title
- * @property {string} lastMessage
- * @property {string} timestamp
- */
-
-/**
- * @typedef {Object} ChatSidebarProps
- * @property {boolean} isCollapsed
- * @property {() => void} onToggle
- */
-
-/**
  * Chat sidebar component that shows conversations list
- * @param {ChatSidebarProps} props 
  */
 export function ChatSidebar() {
   const navigate = useNavigate();

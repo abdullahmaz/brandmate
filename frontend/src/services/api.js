@@ -47,12 +47,8 @@ export const api = {
   sendMessage: (chatId, data) => apiClient.post(`/api/chats/${chatId}/messages`, data),
   getMessages: (chatId, params = {}) => apiClient.get(`/api/chats/${chatId}/messages`, { params }),
   
-  // Legacy endpoint (for backward compatibility)
-  sendMessageLegacy: (data) => apiClient.post('/api/chat', data),
-  
   // Health check
   getHealth: () => apiClient.get('/health'),
-  getStatus: () => apiClient.get('/api/status'),
 };
 
 export default apiClient;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatArea } from './ChatArea';
@@ -7,13 +7,11 @@ import { formatDistanceToNow } from 'date-fns';
 import { useChat, useCreateChat } from '../hooks/useChat';
 import { api } from '../services/api';
 import { queryKeys } from '../types/api';
-import { MessageRole } from '../types/api';
 
 const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [optimisticMessages, setOptimisticMessages] = useState([]);
   const [localMessages, setLocalMessages] = useState([]);
   
   // Only load chat data if we have a chatId and no local messages
@@ -68,11 +66,11 @@ const Chat = () => {
   const messages = React.useMemo(() => {
     // If we have local messages (from current session), use those
     if (localMessages.length > 0) {
-      return [...localMessages, ...optimisticMessages];
+      return localMessages;
     }
     
     // Otherwise, use API messages
-    const apiMessages = chatData?.messages ? chatData.messages.map(msg => ({
+    return chatData?.messages ? chatData.messages.map(msg => ({
       id: msg.id,
       role: msg.role,
       content: msg.content,
@@ -82,24 +80,7 @@ const Chat = () => {
       image: msg.s3_url || null,
       timestamp: formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })
     })) : [];
-    
-    // Merge API messages with optimistic messages, avoiding duplicates
-    const allMessages = [...apiMessages];
-    
-    // Add optimistic messages that aren't already in API messages
-    optimisticMessages.forEach(optMsg => {
-      if (!apiMessages.some(apiMsg => apiMsg.id === optMsg.id)) {
-        allMessages.push(optMsg);
-      }
-    });
-    
-    // Sort by timestamp to maintain order
-    return allMessages.sort((a, b) => {
-      const timeA = new Date(a.timestamp || 0);
-      const timeB = new Date(b.timestamp || 0);
-      return timeA - timeB;
-    });
-  }, [chatData?.messages, optimisticMessages, localMessages]);
+  }, [chatData?.messages, localMessages]);
   
   const handleSendMessage = async (message) => {
     if (!message.trim() || sendMessageMutation.isPending || createChatMutation.isPending) return;
@@ -199,9 +180,7 @@ const Chat = () => {
     }
   };
 
-
   const handleStop = () => {
-    // Implement stop functionality
     sendMessageMutation.reset();
   };
 

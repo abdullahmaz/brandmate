@@ -4,22 +4,7 @@ import { ChatMessage } from './ChatMessage';
 import { Spinner } from './ui/spinner';
 
 /**
- * @typedef {Object} Message
- * @property {string} id
- * @property {'user' | 'assistant'} role
- * @property {string} content
- * @property {string} timestamp
- */
-
-/**
- * @typedef {Object} ChatAreaProps
- * @property {Message[]} messages
- * @property {boolean} [isLoading]
- */
-
-/**
  * Component for displaying chat messages
- * @param {ChatAreaProps} props
  */
 export function ChatArea({ messages, isLoading }) {
   const scrollAreaRef = useRef(null);

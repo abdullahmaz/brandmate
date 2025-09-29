@@ -4,16 +4,7 @@ import { Textarea } from './ui/textarea';
 import { Send, StopCircle } from 'lucide-react';
 
 /**
- * @typedef {Object} ChatInputProps
- * @property {(message: string) => void} onSendMessage
- * @property {boolean} [isLoading]
- * @property {() => void} [onStop]
- * @property {string} [placeholder]
- */
-
-/**
  * Component for chat input with send button
- * @param {ChatInputProps} props
  */
 export function ChatInput({ 
   onSendMessage, 

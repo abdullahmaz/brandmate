@@ -21,16 +21,6 @@ export const useChat = (chatId) => {
   });
 };
 
-// Get messages for a chat
-export const useMessages = (chatId, params = {}) => {
-  return useQuery({
-    queryKey: [...queryKeys.messages(chatId), params],
-    queryFn: () => api.getMessages(chatId, params),
-    select: (response) => response.data,
-    enabled: !!chatId,
-  });
-};
-
 // Send message mutation
 export const useSendMessage = () => {
   const queryClient = useQueryClient();
