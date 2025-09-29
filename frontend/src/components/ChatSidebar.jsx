@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
-import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
 import { PlusIcon, MessageSquare, PanelLeftClose, Settings, Loader2, Trash2 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
@@ -25,15 +24,16 @@ import { formatDistanceToNow } from 'date-fns';
  * Chat sidebar component that shows conversations list
  * @param {ChatSidebarProps} props 
  */
-export function ChatSidebar({ 
-  isCollapsed, 
-  onToggle
-}) {
+export function ChatSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const { data: chats, isLoading } = useChats();
   const deleteChatMutation = useDeleteChat();
   const [deletingChatId, setDeletingChatId] = useState(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const onToggle = () => setIsCollapsed((prev) => !prev);
+
   
   const selectedConversationId = location.pathname.split('/').pop();
   
@@ -97,9 +97,9 @@ export function ChatSidebar({
   }
 
   return (
-    <div className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col">
+    <div className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4 border-b border-sidebar-border flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sidebar-foreground font-bold">Brandmate</h3>
           <Button
@@ -120,7 +120,7 @@ export function ChatSidebar({
       </div>
 
       {/* Conversations List */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -149,25 +149,25 @@ export function ChatSidebar({
                       <p className="text-sidebar-foreground/70 text-sm truncate">
                         {conversation.last_message || 'No messages yet'}
                       </p>
-                      <p className="text-sidebar-foreground/50 text-xs mt-1">
-                        {formatDistanceToNow(new Date(conversation.updated_at), { addSuffix: true })}
-                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-sidebar-foreground/50 text-xs">
+                          {formatDistanceToNow(new Date(conversation.updated_at), { addSuffix: true })}
+                        </p>
+                        <button
+                          onClick={(e) => handleDeleteClick(e, conversation.id)}
+                          disabled={deletingChatId === conversation.id}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete conversation"
+                        >
+                          {deletingChatId === conversation.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </button>
-                
-                {/* Delete button - only show on hover */}
-                <button
-                  onClick={(e) => handleDeleteClick(e, conversation.id)}
-                  disabled={deletingChatId === conversation.id}
-                  className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-red-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Delete conversation"
-                >
-                  {deletingChatId === conversation.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
                 </button>
               </div>
             ))
@@ -178,11 +178,11 @@ export function ChatSidebar({
               <p className="text-xs mt-1">Start a new conversation to get started</p>
             </div>
           )}
+          </div>
         </div>
-      </ScrollArea>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-sidebar-border flex-shrink-0">
         <Button
           variant="ghost"
           className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"

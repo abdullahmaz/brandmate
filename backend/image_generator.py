@@ -60,7 +60,7 @@ class ImageGenerator:
             with torch.no_grad():
                 image = self.pipe(
                     enhanced_prompt,
-                    num_inference_steps=2,
+                    num_inference_steps=20,
                     guidance_scale=7.5,
                     width=512,
                     height=512
