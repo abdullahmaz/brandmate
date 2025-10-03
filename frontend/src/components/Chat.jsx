@@ -23,30 +23,17 @@ const Chat = () => {
     onSuccess: (response, variables) => {
       const { chatId } = variables;
       
-      // Add assistant response to local state
-      const assistantMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: response.data.message,
-        message_type: response.data.tool !== 'conversation' ? response.data.tool : 'text',
-        s3_url: response.data.image,
-        tool: response.data.tool,
-        image: response.data.image,
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true })
-      };
-      
-      setLocalMessages(prev => [...prev, assistantMessage]);
+      // Clear local messages since they'll be replaced by fresh API data
+      setLocalMessages([]);
       
       // Invalidate chat data to refresh messages
       if (chatId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.chats });
       }
     },
     onError: (error) => {
       console.error('Failed to send message:', error);
       
-      // Add error message to local state
       const errorMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
@@ -64,13 +51,8 @@ const Chat = () => {
   
   // Convert API messages to UI format and merge with local state
   const messages = React.useMemo(() => {
-    // If we have local messages (from current session), use those
-    if (localMessages.length > 0) {
-      return localMessages;
-    }
-    
-    // Otherwise, use API messages
-    return chatData?.messages ? chatData.messages.map(msg => ({
+    // Convert API messages to UI format
+    const apiMessages = chatData?.messages ? chatData.messages.map(msg => ({
       id: msg.id,
       role: msg.role,
       content: msg.content,
@@ -80,7 +62,20 @@ const Chat = () => {
       image: msg.s3_url || null,
       timestamp: formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })
     })) : [];
-  }, [chatData?.messages, localMessages]);
+    
+    if (localMessages.length > 0 && (sendMessageMutation.isPending || createChatMutation.isPending)) {
+      const filteredLocalMessages = localMessages.filter(localMsg => 
+        !apiMessages.some(apiMsg => 
+          apiMsg.content === localMsg.content && 
+          apiMsg.role === localMsg.role
+        )
+      );
+      
+      return [...apiMessages, ...filteredLocalMessages];
+    }
+    
+    return apiMessages;
+  }, [chatData?.messages, localMessages, sendMessageMutation.isPending, createChatMutation.isPending]);
   
   const handleSendMessage = async (message) => {
     if (!message.trim() || sendMessageMutation.isPending || createChatMutation.isPending) return;
