@@ -3,40 +3,26 @@ import io
 from PIL import Image
 from typing import Optional
 import os
-from diffusers import StableDiffusionPipeline
+from diffusers import DiffusionPipeline
 import torch
 import gc
 
 class ImageGenerator:
     def __init__(self):
-        # Using local Stable Diffusion model
-        model_name = "runwayml/stable-diffusion-v1-5"
-        print(f"Loading local image generation model: {model_name}")
+        # Using Openjourney model (fine-tuned on Midjourney images)
+        model_name = "prompthero/openjourney"
+        print(f"Loading Openjourney image generation model: {model_name}")
         
         try:
             # Load the pipeline with optimizations
-            self.pipe = StableDiffusionPipeline.from_pretrained(
+            self.pipe = DiffusionPipeline.from_pretrained(
                 model_name,
-                dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                safety_checker=None,
-                requires_safety_checker=False,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 use_safetensors=True,  # Faster loading
             )
             
-            # Move to GPU if available
-            if torch.cuda.is_available():
-                self.pipe = self.pipe.to("cuda")
-                print(f"Using GPU for image generation: {torch.cuda.get_device_name(0)}")
-                print(f"CUDA Version: {torch.version.cuda}")
-            else:
-                print("Using CPU for image generation")
-                
             print("Image generation model loaded successfully!")
             
-            # Enable memory optimization
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                print(f"GPU memory cleared. Available: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
                 
         except Exception as e:
             print(f"Error loading image model: {e}")
@@ -80,18 +66,9 @@ class ImageGenerator:
     def _enhance_prompt_for_eastern_clothing(self, prompt: str, style: str) -> str:
         """
         Enhance the prompt to be more specific for Eastern clothing brands
+        Note: Openjourney requires 'mdjrny-v4 style' prefix for best results
         """
-        style_enhancements = {
-            "eastern_clothing": "Eastern clothing, Pakistani/Indian fashion, traditional and modern fusion, vibrant colors, elegant designs",
-            "summer_collection": "Summer lawn collection, light fabrics, floral patterns, pastel colors, breathable materials",
-            "winter_collection": "Winter khaddar collection, warm fabrics, rich colors, traditional patterns, cozy designs",
-            "formal_wear": "Formal Eastern wear, elegant cuts, sophisticated designs, professional attire",
-            "casual_wear": "Casual Eastern clothing, comfortable fits, everyday wear, modern styles"
-        }
-        
-        enhancement = style_enhancements.get(style, style_enhancements["eastern_clothing"])
-        
-        return f"{prompt}, {enhancement}, high quality, professional photography, marketing poster, clean background, brand showcase"
+        return f"mdjrny-v4 style, {prompt}, {style}, high quality, professional photography, marketing poster, clean background, brand showcase"
     
     def _create_placeholder_image(self, prompt: str) -> str:
         """

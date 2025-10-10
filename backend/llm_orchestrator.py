@@ -37,11 +37,6 @@ class LLMOrchestrator:
             print("Llama 3.2 3B Instruct loaded successfully!")
             self.model_loaded = True
             
-            # Enable memory optimization
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                print(f"GPU memory cleared. Available: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-            
         except Exception as e:
             print(f"Error loading Llama 3.2 3B Instruct: {e}")
             print("Falling back to simpler model...")
@@ -142,7 +137,7 @@ class LLMOrchestrator:
         This follows the Hugging Face Conversations approach
         """
         if not self.model_loaded:
-            return self._fallback_response(user_message, conversation_history)
+            return None
         
         try:
             # Build conversation following HF format
@@ -195,7 +190,7 @@ class LLMOrchestrator:
                 
         except Exception as e:
             print(f"Error with Llama 3.2: {e}")
-            return self._fallback_response(user_message, conversation_history)
+            return None
     
     def _build_conversation(self, user_message: str, conversation_history: list = None) -> list:
         """
@@ -250,149 +245,72 @@ class LLMOrchestrator:
         """
         Create system content for conversation (without Llama formatting)
         """
-        tools_json = json.dumps(self.tools, indent=2)
-        
-        return f"""You are Brandmate, an AI assistant specialized in Eastern clothing brand marketing. You can help users with various marketing tasks and have access to specialized tools.
 
-Available tools:
-{tools_json}
+        return f"""You are Brandmate, an AI assistant for Eastern clothing brand marketing.
 
-You can:
-1. Have natural conversations about Eastern clothing brands, marketing strategies, and fashion
-2. Call tools when users need specific content generated
-3. Provide advice, suggestions, and creative ideas
-4. Help with brand strategy and marketing planning
+                When users ask for images/posters/visuals, use:
+                <image_generation>
+                {{"parameters": {{"prompt": "description", "style": "eastern_clothing"}}}}
 
-When a user requests content generation (images, text, videos, websites), use the appropriate tool. For general conversation, just respond naturally.
+                When users ask for text/captions/copy, use:
+                <text_generation>
+                {{"parameters": {{"topic": "subject", "content_type": "marketing_copy"}}}}
 
-IMPORTANT: When you call a tool, do it ONCE and do it correctly. Do not explain that you should have called a tool or try to correct yourself. Just call the tool directly.
+                When users ask for videos, use:
+                <video_generation>
+                {{"parameters": {{"description": "video description", "video_type": "promotional"}}}}
 
-Tool calling format:
-<tool_call>
-{{
-    "name": "tool_name",
-    "parameters": {{
-        "param1": "value1",
-        "param2": "value2"
-    }}
-}}
-</tool_call>
+                When users ask for websites, use:
+                <website_generation>
+                {{"parameters": {{"brand_info": "brand details", "page_type": "landing"}}}}
 
-Be helpful, creative, and focus on Eastern clothing brand marketing expertise."""
+                For general conversation, just respond normally. Always call tools directly without explanations."""
     
-    def _create_system_prompt(self) -> str:
-        """
-        Create system prompt for Llama 3.2 with tool definitions
-        """
-        tools_json = json.dumps(self.tools, indent=2)
-        
-        return f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-
-You are Brandmate, an AI assistant specialized in Eastern clothing brand marketing. You can help users with various marketing tasks and have access to specialized tools.
-
-Available tools:
-{tools_json}
-
-You can:
-1. Have natural conversations about Eastern clothing brands, marketing strategies, and fashion
-2. Call tools when users need specific content generated
-3. Provide advice, suggestions, and creative ideas
-4. Help with brand strategy and marketing planning
-
-When a user requests content generation (images, text, videos, websites), use the appropriate tool. For general conversation, just respond naturally.
-
-Tool calling format:
-<tool_call>
-{{
-    "name": "tool_name",
-    "parameters": {{
-        "param1": "value1",
-        "param2": "value2"
-    }}
-}}
-</tool_call>
-
-Be helpful, creative, and focus on Eastern clothing brand marketing expertise.<|eot_id|>"""
     
     def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
         """
         Extract tool call from LLM response
         """
-        try:
-            # Look for tool call in the response - try both formats
-            tool_json = None
-            
-            # First try the correct format: <tool_call>...</tool_call>
-            if "<tool_call>" in response and "</tool_call>" in response:
+        # Check for old format first: <tool_call>...</tool_call>
+        if "<tool_call>" in response:
+            try:
                 start = response.find("<tool_call>") + len("<tool_call>")
                 end = response.find("</tool_call>")
-                tool_json = response[start:end].strip()
-            
-            # If not found, try the LLM's format: <image_generation>...</image_generation>
-            elif "<image_generation>" in response and "</image_generation>" in response:
-                start = response.find("<image_generation>") + len("<image_generation>")
-                end = response.find("</image_generation>")
-                tool_json = response[start:end].strip()
-            
-            # If still not found, try other tool formats
-            elif "<text_generation>" in response and "</text_generation>" in response:
-                start = response.find("<text_generation>") + len("<text_generation>")
-                end = response.find("</text_generation>")
-                tool_json = response[start:end].strip()
-            
-            elif "<video_generation>" in response and "</video_generation>" in response:
-                start = response.find("<video_generation>") + len("<video_generation>")
-                end = response.find("</video_generation>")
-                tool_json = response[start:end].strip()
-            
-            elif "<website_generation>" in response and "</website_generation>" in response:
-                start = response.find("<website_generation>") + len("<website_generation>")
-                end = response.find("</website_generation>")
-                tool_json = response[start:end].strip()
-            
-            if tool_json:
-                print(f"DEBUG: Found tool JSON: {tool_json}")
-                tool_call = json.loads(tool_json)
-                print(f"DEBUG: Parsed tool call: {tool_call}")
-                
-                # If the tool call doesn't have a "name" field, infer it from the tag
-                if "name" not in tool_call:
-                    if "<image_generation>" in response:
-                        tool_call["name"] = "image_generation"
-                    elif "<text_generation>" in response:
-                        tool_call["name"] = "text_generation"
-                    elif "<video_generation>" in response:
-                        tool_call["name"] = "video_generation"
-                    elif "<website_generation>" in response:
-                        tool_call["name"] = "website_generation"
-                    print(f"DEBUG: Inferred tool name: {tool_call.get('name')}")
-                
-                # Fix tool call structure - ensure parameters are properly nested
-                if "name" in tool_call:
-                    # If parameters are at the root level, move them to a parameters object
-                    if "parameters" not in tool_call:
-                        parameters = {}
-                        for key, value in tool_call.items():
-                            if key != "name":
-                                parameters[key] = value
-                        tool_call = {
-                            "name": tool_call["name"],
-                            "parameters": parameters
-                        }
-                        print(f"DEBUG: Restructured tool call: {tool_call}")
-                
-                # Validate tool call
-                available_tools = [tool["name"] for tool in self.tools]
-                print(f"DEBUG: Available tools: {available_tools}")
-                
-                if "name" in tool_call and tool_call["name"] in available_tools:
-                    print(f"DEBUG: Tool call validated successfully")
-                    return tool_call
+                if end == -1:
+                    tool_json = response[start:].strip()
                 else:
-                    print(f"DEBUG: Tool call validation failed - name: {tool_call.get('name')}, available: {available_tools}")
+                    tool_json = response[start:end].strip()
+                
+                tool_call = json.loads(tool_json)
+                available_tools = [tool["name"] for tool in self.tools]
+                if tool_call.get("name") in available_tools:
+                    return tool_call
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Error parsing tool_call: {e}")
+        
+        # Check for new format: <image_generation>, <text_generation>, etc.
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        
+        for tag in tool_tags:
+            if tag in response:
+                try:
+                    start = response.find(tag) + len(tag)
+                    tool_json = response[start:].strip()
                     
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Error parsing tool call: {e}")
+                    if '\n' in tool_json:
+                        tool_json = tool_json.split('\n')[0]
+                    
+                    tool_call = json.loads(tool_json)
+                    tool_name = tag[1:-1]
+                    tool_call["name"] = tool_name
+                    
+                    available_tools = [tool["name"] for tool in self.tools]
+                    if tool_name in available_tools:
+                        return tool_call
+                        
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"Error parsing {tag}: {e}")
+                    continue
         
         return None
     
@@ -400,120 +318,18 @@ Be helpful, creative, and focus on Eastern clothing brand marketing expertise.<|
         """
         Clean the LLM response for conversation history by removing tool calls
         """
-        # Remove tool call blocks
         import re
         
-        # Remove <tool_call>...</tool_call> blocks
-        cleaned = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
+        # Remove tool-specific tags and their content
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        cleaned = response
         
-        # Remove other tool-related tags that might appear
-        cleaned = re.sub(r'<image_generation>.*?</image_generation>', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'<text_generation>.*?</text_generation>', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'<video_generation>.*?</video_generation>', '', cleaned, flags=re.DOTALL)
-        cleaned = re.sub(r'<website_generation>.*?</website_generation>', '', cleaned, flags=re.DOTALL)
+        for tag in tool_tags:
+            # Remove the tag and everything after it on the same line
+            cleaned = re.sub(f'{re.escape(tag)}.*$', '', cleaned, flags=re.MULTILINE)
         
         # Clean up extra whitespace
         cleaned = re.sub(r'\n\s*\n', '\n\n', cleaned)
         cleaned = cleaned.strip()
         
         return cleaned if cleaned else "I'll help you with that request."
-    
-    def _fallback_response(self, user_message: str, conversation_history: list = None) -> Dict[str, Any]:
-        """
-        Fallback response when model is not available
-        """
-        message_lower = user_message.lower().strip()
-        
-        # Build conversation for fallback
-        conversation = []
-        if conversation_history:
-            conversation.extend(conversation_history)
-        
-        # Add current user message
-        conversation.append({"role": "user", "content": user_message})
-        
-        # Simple intent detection for fallback
-        if any(phrase in message_lower for phrase in [
-            "image", "poster", "banner", "visual", "design", "picture", "photo"
-        ]):
-            response_msg = f"I'll help you create an image for: {user_message}"
-            conversation.append({"role": "assistant", "content": response_msg})
-            return {
-                "type": "tool_call",
-                "tool": "image_generation",
-                "parameters": {"prompt": user_message, "style": "eastern_clothing"},
-                "response": response_msg,
-                "reasoning": "Fallback detected image-related request",
-                "conversation_history": conversation
-            }
-        elif any(phrase in message_lower for phrase in [
-            "text", "caption", "copy", "description", "write", "content"
-        ]):
-            response_msg = f"I'll help you create text content for: {user_message}"
-            conversation.append({"role": "assistant", "content": response_msg})
-            return {
-                "type": "tool_call",
-                "tool": "text_generation",
-                "parameters": {"topic": user_message, "content_type": "marketing_copy"},
-                "response": response_msg,
-                "reasoning": "Fallback detected text-related request",
-                "conversation_history": conversation
-            }
-        elif any(phrase in message_lower for phrase in [
-            "video", "reel", "animation", "motion", "clip"
-        ]):
-            response_msg = f"I'll help you create video content for: {user_message}"
-            conversation.append({"role": "assistant", "content": response_msg})
-            return {
-                "type": "tool_call",
-                "tool": "video_generation",
-                "parameters": {"description": user_message, "video_type": "promotional"},
-                "response": response_msg,
-                "reasoning": "Fallback detected video-related request",
-                "conversation_history": conversation
-            }
-        elif any(phrase in message_lower for phrase in [
-            "website", "landing", "page", "site", "web"
-        ]):
-            response_msg = f"I'll help you create website content for: {user_message}"
-            conversation.append({"role": "assistant", "content": response_msg})
-            return {
-                "type": "tool_call",
-                "tool": "website_generation",
-                "parameters": {"brand_info": user_message, "page_type": "landing"},
-                "response": response_msg,
-                "reasoning": "Fallback detected website-related request",
-                "conversation_history": conversation
-            }
-        else:
-            response_msg = f"Hello! I'm Brandmate, your AI assistant for Eastern clothing brand marketing. I can help you create images, text, videos, and websites for your brand. What would you like me to help you with today?"
-            conversation.append({"role": "assistant", "content": response_msg})
-            return {
-                "type": "conversation",
-                "response": response_msg,
-                "reasoning": "Fallback provided general greeting",
-                "conversation_history": conversation
-            }
-    
-    # Legacy method for backward compatibility
-    async def analyze_request(self, user_message: str) -> Dict[str, Any]:
-        """
-        Legacy method - now calls the new process_request method
-        """
-        result = await self.process_request(user_message)
-        
-        if result["type"] == "tool_call":
-            return {
-                "tool": result["tool"],
-                "confidence": 0.9,
-                "reasoning": result["reasoning"],
-                "parameters": result["parameters"],
-                "response": result["response"]
-            }
-        else:
-            return {
-                "tool": "conversation",
-                "confidence": 0.8,
-                "reasoning": result["reasoning"],
-                "response": result["response"]
-            }
