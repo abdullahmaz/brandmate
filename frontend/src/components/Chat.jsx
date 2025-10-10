@@ -63,15 +63,8 @@ const Chat = () => {
       timestamp: formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })
     })) : [];
     
-    if (localMessages.length > 0 && (sendMessageMutation.isPending || createChatMutation.isPending)) {
-      const filteredLocalMessages = localMessages.filter(localMsg => 
-        !apiMessages.some(apiMsg => 
-          apiMsg.content === localMsg.content && 
-          apiMsg.role === localMsg.role
-        )
-      );
-      
-      return [...apiMessages, ...filteredLocalMessages];
+    if (localMessages.length > 0) {
+      return [...apiMessages, ...localMessages];
     }
     
     return apiMessages;
@@ -143,8 +136,7 @@ const Chat = () => {
         
         setLocalMessages(prev => [...prev, userMessage]);
 
-        // Prepare conversation history for the API
-        const history = messages.map(msg => ({
+        const history = messages.slice(-5).map(msg => ({
           role: msg.role,
           content: msg.content
         }));
