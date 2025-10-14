@@ -1,0 +1,14 @@
+bs4
+requests
+beautifulsoup4
+lxml
+selenium
+webdriver-manager
+pandas
+Pillow
+tqdm
+
+# For auto-captioning (optional - only needed for caption generation)
+transformers>=4.30.0
+torch>=2.0.0
+accelerate>=0.20.0
