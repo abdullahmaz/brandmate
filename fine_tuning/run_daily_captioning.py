@@ -50,11 +50,11 @@ def main():
     
     # Configuration
     API_KEYS = [
-        "YOUR_API_KEY_1_HERE",
-        "YOUR_API_KEY_2_HERE", 
-        "YOUR_API_KEY_3_HERE",
-        "YOUR_API_KEY_4_HERE",
-        "YOUR_API_KEY_5_HERE"
+        "AIzaSyBG8ZfDEQ0uxdF7TYuc2lTGWFA0-u0yGPA",
+        "AIzaSyDiZvvcll1C3rIzVA91W1yXo_Zua6QL-x0", 
+        "AIzaSyDrMvV6xG-NEJOQK_0BbFR6lL1QhvckcDI",
+        "AIzaSyCw9mvgpt1YMTukVYCkcF_BrKN6lFa6UXk",
+        "AIzaSyDMj2Sb2XY2qFbkS7cCHLM0cwQ_9GiPxFI"
     ]
     
     CATEGORIES = [
