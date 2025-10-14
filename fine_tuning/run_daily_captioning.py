@@ -14,7 +14,8 @@ def run_captioning_for_category(category, api_keys, data_root="data_backup", bat
     print(f"\n{'=' * 50}")
     print(f"Processing: {category}")
     print(f"{'=' * 50}")
-    
+    print(f"Using {len(api_keys)} API key(s)")
+    print(f"Batch size: {batch_size} images per key")
     # Construct command
     cmd = [
         sys.executable,
