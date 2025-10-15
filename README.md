@@ -6,11 +6,13 @@ An intelligent AI platform that automates end-to-end brand marketing for Eastern
 
 - **🤖 Intelligent Chat Interface**: Claude-like conversational AI for natural brand asset requests
 - **🧠 LLM Orchestrator**: Uses Llama 3.2 3B Instruct for intelligent reasoning and tool calling
-- **🎨 Image Generation**: Creates stunning Eastern clothing marketing visuals using Stable Diffusion
+- **🎨 Image Generation**: Creates stunning Eastern clothing marketing visuals using OpenJourney (Midjourney-style)
 - **📝 Text Generation**: Generates marketing copy, captions, and brand descriptions
 - **🎬 Video Generation**: Creates promotional videos and social media content
 - **🌐 Website Generation**: Builds landing pages and web content
 - **🎯 Brand Consistency**: Specialized for Eastern clothing brands and seasonal collections
+- **💾 Database Integration**: Supabase for chat history and message persistence
+- **☁️ Cloud Storage**: AWS S3 for generated image storage
 - **💎 Modern UI**: Built with React, TailwindCSS, and ShadCN components
 
 ## 🏗️ Project Structure
@@ -24,19 +26,32 @@ brandmate/
 │   │   │   ├── Chat.jsx   # Main chat interface
 │   │   │   ├── ChatArea.jsx # Message display area
 │   │   │   ├── ChatInput.jsx # Message input component
-│   │   │   └── ChatMessage.jsx # Individual message component
+│   │   │   ├── ChatMessage.jsx # Individual message component
+│   │   │   ├── ChatSidebar.jsx # Chat history sidebar
+│   │   │   └── ThemeProvider.jsx # Theme context provider
+│   │   ├── hooks/         # Custom React hooks
+│   │   │   └── useChat.js # Chat state management hook
+│   │   ├── services/      # API service layer
+│   │   │   └── api.js     # Backend API client
+│   │   ├── providers/     # React context providers
+│   │   │   └── QueryProvider.jsx # React Query provider
 │   │   ├── lib/           # Utility functions
 │   │   └── App.jsx        # Main application component
 │   ├── package.json
 │   └── README.md
 ├── backend/               # FastAPI backend with AI orchestration
-│   ├── main.py           # FastAPI server and API endpoints
+│   ├── main.py            # FastAPI server and API endpoints
 │   ├── llm_orchestrator.py # LLM orchestration and tool calling
-│   ├── image_generator.py # Image generation using Stable Diffusion
-│   ├── install_models.py # Model installation scripts
-│   ├── requirements.txt  # Python dependencies
+│   ├── image_generator.py # Image generation using OpenJourney
+│   ├── database_models.py # Pydantic models for database
+│   ├── database_service.py # Database operations with Supabase
+│   ├── storage_service.py # File storage with AWS S3
+│   ├── supabase_client.py # Supabase client initialization
+│   ├── s3_client.py       # AWS S3 client initialization
+│   ├── requirements.txt   # Python dependencies
+│   ├── env_example.txt    # Environment variables template
 │   └── README.md
-├── start_dev.bat         # Development startup script (Windows)
+├── start_dev.bat          # Development startup script (Windows)
 └── README.md
 ```
 
@@ -63,9 +78,16 @@ brandmate/
    cd backend
    pip install -r requirements.txt
    cp env_example.txt .env
-   # Edit .env with your configuration
-   python install_models.py  # Download required models
+   # Edit .env with your configuration:
+   # - HF_TOKEN: Your Hugging Face token (required for model access)
+   # - SUPABASE_URL: Your Supabase project URL (optional, for chat persistence)
+   # - SUPABASE_ANON_KEY: Your Supabase anonymous key (optional)
+   # - AWS_ACCESS_KEY_ID: Your AWS access key (optional, for S3 storage)
+   # - AWS_SECRET_ACCESS_KEY: Your AWS secret key (optional)
+   # - S3_BUCKET_NAME: Your S3 bucket name (optional)
    ```
+   
+   **Note:** Models will be downloaded automatically on first run. This may take several minutes.
 
 3. **Setup Frontend:**
    ```bash
@@ -125,18 +147,24 @@ brandmate/
 ## 🛠️ Technology Stack
 
 ### Frontend
-- **React 18** - Modern UI library
+- **React 19** - Modern UI library
 - **Vite** - Fast build tool and dev server
 - **TailwindCSS** - Utility-first CSS framework
 - **ShadCN UI** - High-quality component library
+- **React Router** - Client-side routing
+- **React Query** - Data fetching and caching
+- **Axios** - HTTP client for API requests
 - **Lucide React** - Beautiful icon library
 - **date-fns** - Date manipulation utilities
 
 ### Backend
 - **FastAPI** - Modern, fast web framework for APIs
 - **Llama 3.2 3B Instruct** - Large language model for orchestration
-- **Stable Diffusion v1.5** - Image generation model
+- **OpenJourney** - Midjourney-style image generation model
 - **Hugging Face Transformers** - Model loading and inference
+- **Supabase** - PostgreSQL database for chat persistence
+- **AWS S3** - Cloud storage for generated images
+- **Boto3** - AWS SDK for Python
 - **Pydantic** - Data validation and settings management
 - **Uvicorn** - ASGI server for FastAPI
 
@@ -185,9 +213,10 @@ python -m uvicorn main:app --reload  # Alternative with auto-reload
 - **Features**: Context-aware responses, intelligent tool selection
 
 ### Image Generation
-- **Model**: Stable Diffusion v1.5
+- **Model**: OpenJourney (Midjourney-style fine-tuned model)
 - **Specialization**: Eastern clothing, traditional wear, seasonal collections
-- **Output**: High-quality PNG images with base64 encoding
+- **Output**: High-quality PNG images with base64 encoding or S3 URLs
+- **Storage**: AWS S3 for persistent image storage
 
 ### Tool Calling System
 The LLM can intelligently call these tools based on user requests:
@@ -213,10 +242,28 @@ python main.py
 ### Environment Variables
 Create a `.env` file in the backend directory:
 ```env
-HUGGINGFACE_API_TOKEN=your_token_here
+# Hugging Face Configuration (Required for model access)
+HF_TOKEN=your_huggingface_token_here
+
+# Supabase Configuration (Optional - for chat persistence)
+SUPABASE_URL=your_supabase_url_here
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# AWS S3 Configuration (Optional - for image storage)
+AWS_ACCESS_KEY_ID=your_aws_access_key_id_here
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key_here
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your_s3_bucket_name_here
+
+# Optional Settings
 MODEL_CACHE_DIR=./models
 DEBUG=False
 ```
+
+**Note:** 
+- **HF_TOKEN** is required for downloading and using AI models
+- **Supabase** credentials are optional but enable chat history persistence
+- **AWS S3** credentials are optional but enable permanent image storage (falls back to base64 if not configured)
 
 ## 👥 Project Team
 
@@ -269,8 +316,11 @@ For support and questions:
 
 ## 🙏 Acknowledgments
 
-- OpenAI for the GPT-OSS model
+- Meta AI for Llama 3.2 3B Instruct model
+- PromptHero for the OpenJourney model
 - Hugging Face for the model hosting and transformers library
-- Stability AI for Stable Diffusion
+- Supabase for the database platform
+- AWS for S3 cloud storage
 - The React and FastAPI communities
 - ShadCN for the beautiful UI components
+- Vercel for the design inspiration

@@ -37,6 +37,7 @@ frontend/
 │   │   │   ├── input.jsx    # Input field component
 │   │   │   ├── scroll-area.jsx # Scrollable area component
 │   │   │   ├── separator.jsx # Visual separator component
+│   │   │   ├── spinner.jsx  # Loading spinner component
 │   │   │   └── textarea.jsx # Textarea component
 │   │   ├── Chat.jsx         # Main chat interface component
 │   │   ├── ChatArea.jsx     # Message display area
@@ -44,20 +45,26 @@ frontend/
 │   │   ├── ChatMessage.jsx  # Individual message component
 │   │   ├── ChatSidebar.jsx  # Sidebar for chat history
 │   │   └── ThemeProvider.jsx # Theme context provider
+│   ├── hooks/               # Custom React hooks
+│   │   └── useChat.js       # Chat state management hook
+│   ├── services/            # API service layer
+│   │   └── api.js           # Axios-based backend API client
+│   ├── providers/           # React context providers
+│   │   └── QueryProvider.jsx # React Query provider
 │   ├── lib/
-│   │   └── utils.js         # Utility functions
+│   │   └── utils.js         # Utility functions (cn, etc.)
 │   ├── App.jsx              # Main application component
-│   ├── App.css              # Application styles
 │   ├── main.jsx             # Application entry point
 │   ├── index.css            # Global styles
 │   └── globals.css          # Global CSS variables
 ├── public/
 │   └── vite.svg             # Vite logo
-├── components.json           # ShadCN UI configuration
+├── components.json          # ShadCN UI configuration
 ├── package.json             # Dependencies and scripts
 ├── tailwind.config.js       # TailwindCSS configuration
 ├── postcss.config.js        # PostCSS configuration
 ├── vite.config.js           # Vite configuration
+├── jsconfig.json            # JavaScript configuration
 └── README.md
 ```
 
@@ -135,6 +142,38 @@ Message input component that handles:
 - Loading state with disabled input
 - Stop button during generation
 
+### Hooks
+
+#### `useChat.js`
+Custom React hook for chat state management:
+- Message history management
+- API communication
+- Loading states
+- Error handling
+
+### Providers
+
+#### `QueryProvider.jsx`
+React Query provider for efficient data fetching and caching:
+- Wraps the app with QueryClientProvider
+- Configures React Query defaults
+- Enables automatic refetching and caching
+
+### Services
+
+#### `api.js`
+Axios-based API client for backend communication:
+- **Base URL**: `http://localhost:8000`
+- **Features**: Request/response interceptors, error handling, logging
+- **Methods**: 
+  - `createChat()` - Create new chat
+  - `getChats()` - Get all chats
+  - `getChat(chatId)` - Get chat with messages
+  - `sendMessage(chatId, data)` - Send message to chat
+  - `getMessages(chatId)` - Get chat messages
+  - `updateChatTitle(chatId, title)` - Update chat title
+  - `deleteChat(chatId)` - Delete chat
+
 ### UI Components (ShadCN)
 
 #### `Avatar.jsx`
@@ -154,6 +193,9 @@ Custom scrollable area with smooth scrolling.
 
 #### `Separator.jsx`
 Visual separator component for dividing content.
+
+#### `Spinner.jsx`
+Loading spinner component for async operations.
 
 #### `Textarea.jsx`
 Multi-line text input component.
@@ -219,11 +261,15 @@ This creates an optimized production build in the `dist/` directory with:
 ```javascript
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   server: {
     port: 5173,
-    proxy: {
-      '/api': 'http://localhost:8000'
-    }
+    // Note: API calls are handled directly via axios baseURL,
+    // not through Vite proxy
   }
 })
 ```
@@ -297,22 +343,50 @@ module.exports = {
 
 ### Backend Communication
 - **Base URL**: `http://localhost:8000`
-- **Endpoints**: `/api/chat` for main communication
-- **Error Handling**: Graceful error messages
+- **Client**: Axios with interceptors
+- **Error Handling**: Graceful error messages with fallbacks
 - **Loading States**: Visual feedback during requests
+- **Caching**: React Query for data caching and synchronization
+
+### API Endpoints Used
+
+**Chat Management:**
+- `POST /api/chats` - Create new chat
+- `GET /api/chats` - Get all chats
+- `GET /api/chats/{chat_id}` - Get chat with messages
+- `DELETE /api/chats/{chat_id}` - Delete chat
+
+**Messaging:**
+- `POST /api/chats/{chat_id}/messages` - Send message and get response
+- `GET /api/chats/{chat_id}/messages` - Get chat messages
+
+**Legacy:**
+- `POST /api/chat` - Legacy chat endpoint (still supported)
 
 ### Message Format
 ```javascript
-// Request
+// Request (New API)
 {
-  "message": "Create a poster for my brand"
+  "message": "Create a poster for my brand",
+  "conversation_history": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ]
 }
 
 // Response
 {
   "message": "I've generated an image for your request...",
-  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-  "tool": "image_generation"
+  "image": "https://bucket.s3.amazonaws.com/image.png", // or base64 data URL
+  "tool": "image_generation",
+  "chat_id": "uuid-here"
+}
+
+// Request (Legacy API)
+{
+  "message": "Create a poster for my brand",
+  "chat_id": "uuid-here",
+  "conversation_history": []
 }
 ```
 
@@ -387,9 +461,18 @@ npm run build
 - **Server**: Nginx, Apache
 
 ### Environment Variables
+
+The frontend currently uses hardcoded API URL in `services/api.js`. For production deployment, you should:
+
+1. Create a `.env` file:
 ```bash
 VITE_API_URL=http://localhost:8000
 VITE_APP_NAME=Brandmate
+```
+
+2. Update `services/api.js` to use environment variables:
+```javascript
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 ```
 
 ## 🤝 Contributing
@@ -424,4 +507,8 @@ This project is part of the Final Year Project at FAST NUCES, Islamabad.
 - **React** for the UI library
 - **TailwindCSS** for the styling framework
 - **ShadCN UI** for the component library
+- **React Query** for data fetching and caching
+- **React Router** for client-side routing
+- **Axios** for HTTP requests
 - **date-fns** for date utilities
+- **Lucide React** for beautiful icons
