@@ -9,31 +9,38 @@ import time
 
 try:
     import google.generativeai as genai
-except ImportError:
-    print("❌ Missing google-generativeai. Install with: pip install google-generativeai")
+    from dotenv import load_dotenv
+except ImportError as e:
+    if "google.generativeai" in str(e):
+        print("❌ Missing google-generativeai. Install with: pip install google-generativeai")
+    elif "dotenv" in str(e):
+        print("❌ Missing python-dotenv. Install with: pip install python-dotenv")
+    else:
+        print(f"❌ Missing dependency: {e}")
     exit(1)
 
 
 def load_api_keys():
-    """Load API keys from run_daily_captioning.py"""
+    """Load API keys from .env file"""
     try:
-        with open("scripts/run_daily_captioning.py", 'r') as f:
-            content = f.read()
+        # Load environment variables from .env file
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+        load_dotenv(env_path)
         
-        # Extract API_KEYS list
-        pattern = r'API_KEYS\s*=\s*\[(.*?)\]'
-        match = re.search(pattern, content, re.DOTALL)
+        api_keys = []
+        for i in range(1, 6):  # Load up to 5 API keys
+            key = os.getenv(f'GEMINI_API_KEY_{i}')
+            if key:
+                api_keys.append(key)
         
-        if match:
-            keys_text = match.group(1)
-            keys = re.findall(r'"([^"]+)"', keys_text)
-            return keys
-        else:
-            print("❌ Could not find API_KEYS in scripts/run_daily_captioning.py")
-            return []
+        if not api_keys:
+            print("❌ No API keys found in .env file!")
+            print("Please check your .env file contains GEMINI_API_KEY_1, etc.")
+        
+        return api_keys
             
-    except FileNotFoundError:
-        print("❌ scripts/run_daily_captioning.py not found")
+    except Exception as e:
+        print(f"❌ Error loading .env file: {e}")
         return []
 
 

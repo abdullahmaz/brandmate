@@ -7,6 +7,21 @@ import os
 import sys
 import subprocess
 from datetime import date
+from dotenv import load_dotenv
+
+def load_api_keys_from_env():
+    """Load API keys from .env file"""
+    # Load environment variables from .env file
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    load_dotenv(env_path)
+    
+    api_keys = []
+    for i in range(1, 6):  # Load up to 5 API keys
+        key = os.getenv(f'GEMINI_API_KEY_{i}')
+        if key:
+            api_keys.append(key)
+    
+    return api_keys
 
 def run_captioning_for_category(category, api_keys, data_root="data_backup", batch_size=100):
     """Run captioning for a single category"""
@@ -51,14 +66,13 @@ def main():
     print(f"Date: {date.today()}")
     print("=" * 60)
     
-    # Configuration
-    API_KEYS = [
-        "AIzaSyBG8ZfDEQ0uxdF7TYuc2lTGWFA0-u0yGPA",
-        "AIzaSyDiZvvcll1C3rIzVA91W1yXo_Zua6QL-x0", 
-        "AIzaSyDrMvV6xG-NEJOQK_0BbFR6lL1QhvckcDI",
-        "AIzaSyCw9mvgpt1YMTukVYCkcF_BrKN6lFa6UXk",
-        "AIzaSyDMj2Sb2XY2qFbkS7cCHLM0cwQ_9GiPxFI"
-    ]
+    # Load API keys from .env file
+    API_KEYS = load_api_keys_from_env()
+    
+    if not API_KEYS:
+        print("❌ No API keys found in .env file!")
+        print("Please check your .env file contains GEMINI_API_KEY_1, etc.")
+        return
     
     CATEGORIES = [
         "Summer_Men",

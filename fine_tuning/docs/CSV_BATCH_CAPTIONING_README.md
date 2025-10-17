@@ -28,16 +28,20 @@ pip install google-generativeai Pillow tqdm
 
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create up to 5 API keys
-3. Edit `scripts/run_daily_captioning.py` and replace the placeholder API keys:
+3. Copy `.env.example` to `.env` and add your keys:
 
-```python
-API_KEYS = [
-    "your_actual_api_key_1",
-    "your_actual_api_key_2", 
-    "your_actual_api_key_3",
-    "your_actual_api_key_4",
-    "your_actual_api_key_5"
-]
+```bash
+cp .env.example .env
+# Edit .env with your actual API keys
+```
+
+Example `.env` file:
+```bash
+GEMINI_API_KEY_1=your_actual_api_key_1
+GEMINI_API_KEY_2=your_actual_api_key_2
+GEMINI_API_KEY_3=your_actual_api_key_3
+GEMINI_API_KEY_4=your_actual_api_key_4
+GEMINI_API_KEY_5=your_actual_api_key_5
 ```
 
 ## Usage
@@ -155,19 +159,28 @@ fine_tuning/
 │   └── Winter/
 │       ├── Men/          # wm_1.jpg, wm_2.jpg, etc.
 │       └── Women/        # ww_1.jpg, ww_2.jpg, etc.
-├── gemini_caption_csv_batch.py    # Main script
-├── run_daily_captioning.py        # Daily runner
-├── run_daily_captioning.bat       # Windows batch file
-└── captions_*.csv                 # Generated CSV files
+├── scripts/
+│   ├── gemini_caption_csv_batch.py    # Main script
+│   └── run_daily_captioning.py        # Daily runner
+├── captions/
+│   └── captions_*.csv                 # Generated CSV files
+├── progress/
+│   └── .caption_progress_*.json       # Progress tracking
+├── utils/
+│   └── check_api_status.py            # API status checker
+├── run_daily_captioning.bat           # Windows batch file
+└── .env                               # API keys (create this)
 ```
 
 ## Tips
 
 1. **Run daily** at the same time to establish a routine
 2. **Monitor CSV files** to track progress across days  
-3. **Keep API keys secure** - don't commit them to git
+3. **Keep API keys secure** - `.env` file is excluded from git automatically
 4. **Backup CSV files** regularly as they contain your work
 5. **Check progress files** if you need to see detailed status
+6. **Use `python utils/check_api_status.py`** to monitor quota usage
+7. **Never commit `.env` file** - use `.env.example` for team sharing
 
 ## Expected Performance
 

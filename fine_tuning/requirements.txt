@@ -7,6 +7,7 @@ webdriver-manager
 pandas
 Pillow
 tqdm
+python-dotenv
 
 # For auto-captioning (optional - only needed for caption generation)
 transformers>=4.30.0
