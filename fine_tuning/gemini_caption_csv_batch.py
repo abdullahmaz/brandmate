@@ -96,48 +96,53 @@ class BatchGeminiFashionCaptioner:
         base_instruction = (
             "You are an expert fashion image captioning assistant specializing in Pakistani clothing. "
             "Generate precise, detailed captions for model fine-tuning. "
-            "Focus primarily on the CLOTHING and FASHION details, then mention other visible elements. "
+            "CRITICAL: Always start with clothing and fashion details first. Background and model details come last. "
         )
         
         category_specific = {
             "Winter_Men": (
-                "This image shows Pakistani men's winter formal wear. "
-                "Describe the type of clothing (waistcoat, coat, sherwani, suit, shalwar kameez), "
-                "fabric type (wool, khaddar, blended), colors, patterns (plain, embroidered, printed), "
+                "Caption Pakistani men's winter formal wear. "
+                "FIRST (sentences 1-2): Describe the clothing in detail - type (waistcoat, coat, sherwani, suit, shalwar kameez), "
+                "fabric (wool, khaddar, blended), colors, patterns (plain, embroidered, printed), "
                 "fit (slim, regular, loose), styling details (buttons, collar, pockets, embroidery). "
-                "Then briefly mention the model's pose, background, and any accessories (shoes, watch). "
-                "Use terms like: waistcoat, sherwani, shalwar kameez, kurta, formal wear, winter clothing."
+                "LAST (sentence 3): Briefly mention model pose, background, accessories (shoes, watch). "
+                "Use terms: waistcoat, sherwani, shalwar kameez, kurta, formal wear, winter clothing."
             ),
             "Winter_Women": (
-                "This image shows Pakistani women's winter clothing. "
-                "Describe the type of outfit (khaddar suit, shawl, printed fabric, three-piece unstitched), "
-                "fabric type (khaddar, karandi, linen, wool), colors, print patterns (floral, geometric, striped), "
-                "embroidery details, styling. Then mention the model's appearance, pose, and background. "
-                "Use terms like: khaddar, three-piece, unstitched, dupatta, printed, embroidered, winter collection."
+                "Caption Pakistani women's winter clothing. "
+                "FIRST (sentences 1-2): Describe the clothing in detail - outfit type (khaddar suit, shawl, three-piece unstitched), "
+                "fabric (khaddar, karandi, linen, wool), colors, print patterns (floral, geometric, striped), "
+                "embroidery details, styling, dupatta design. "
+                "LAST (sentence 3): Briefly mention model appearance, pose, background. "
+                "Use terms: khaddar, three-piece, unstitched, dupatta, printed, embroidered, winter collection."
             ),
             "Summer_Men": (
-                "This image shows Pakistani men's summer eastern wear. "
-                "Describe the type of clothing (kurta, shalwar kameez, casual eastern wear), "
-                "fabric type (lawn, cotton, linen, cambric), colors, patterns, fit, collar style. "
-                "Then mention the model's styling, pose, and background. "
-                "Use terms like: shalwar kameez, kurta, lawn fabric, summer wear, eastern clothing, casual."
+                "Caption Pakistani men's summer eastern wear. "
+                "FIRST (sentences 1-2): Describe the clothing in detail - type (kurta, shalwar kameez, casual eastern wear), "
+                "fabric (lawn, cotton, linen, cambric), colors, patterns, fit, collar style, embroidery or prints. "
+                "LAST (sentence 3): Briefly mention model styling, pose, background. "
+                "Use terms: shalwar kameez, kurta, lawn fabric, summer wear, eastern clothing, casual."
             ),
             "Summer_Women": (
-                "This image shows Pakistani women's summer lawn clothing. "
-                "Describe the outfit type (lawn suit, unstitched fabric, three-piece, printed lawn), "
+                "Caption Pakistani women's summer lawn clothing. "
+                "FIRST (sentences 1-2): Describe the clothing in detail - outfit type (lawn suit, unstitched fabric, three-piece, printed lawn), "
                 "fabric quality (lawn, cotton, silk blend), colors, print style (floral, abstract, traditional), "
-                "design details, embroidery or embellishments. Then mention styling and background. "
-                "Use terms like: lawn fabric, unstitched, three-piece suit, printed, summer collection, dupatta."
+                "design details, embroidery, embellishments, dupatta pattern. "
+                "LAST (sentence 3): Briefly mention styling and background. "
+                "Use terms: lawn fabric, unstitched, three-piece suit, printed, summer collection, dupatta."
             )
         }
         
         specific = category_specific.get(category, "")
         
         closing = (
-            "\n\nFormat: Write 2-4 sentences. "
-            "Start with clothing description (1-2 sentences), then add context (1-2 sentences). "
-            "Use clear, factual language. Avoid artistic or subjective phrases. "
-            "Be specific about colors, fabrics, and clothing types."
+            "\n\nFormat requirements: "
+            "Write exactly 3 sentences in a single paragraph. "
+            "Sentences 1-2: Focus ONLY on clothing (fabric, color, pattern, style, cut, embroidery). "
+            "Sentence 3: Mention model, pose, and background ONLY. "
+            "Write in one continuous paragraph with NO line breaks. "
+            "Do NOT start with phrases like 'Here is a caption for the image:' - start directly with clothing description. "
+            "Use clear, factual language. Be specific about colors, fabrics, and clothing types."
         )
         
         return base_instruction + specific + closing
@@ -165,6 +170,27 @@ class BatchGeminiFashionCaptioner:
             
             # Extract caption text
             caption = response.text.strip()
+            
+            # Sanitize caption for CSV format:
+            # 1. Remove newlines (replace with spaces)
+            caption = caption.replace('\n\n', ' ').replace('\n', ' ')
+            
+            # 2. Remove common preambles
+            preambles = [
+                "Here is a caption for the image:",
+                "Here is a caption:",
+                "Here's a caption for the image:",
+                "Here's a caption:",
+                "Caption:",
+                "This image shows:",
+            ]
+            for preamble in preambles:
+                if caption.startswith(preamble):
+                    caption = caption[len(preamble):].strip()
+                    break
+            
+            # 3. Ensure no extra whitespace
+            caption = ' '.join(caption.split())
             
             return caption
             
@@ -259,11 +285,25 @@ class BatchGeminiFashionCaptioner:
         csv_exists = os.path.exists(csv_output_path)
         processed = 0
         errors = 0
-        with open(csv_output_path, 'a', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            if not csv_exists:
-                writer.writerow(['filename', 'caption'])
-            for image_file in tqdm(image_files, desc=f"Captioning {category_name}"):
+        # Open CSV with a short retry loop to handle transient Windows permission locks
+        attempts = 0
+        csvfile = None
+        while attempts < 5:
+            try:
+                csvfile = open(csv_output_path, 'a', newline='', encoding='utf-8')
+                break
+            except PermissionError:
+                attempts += 1
+                time.sleep(0.2)
+        if csvfile is None:
+            print(f"[ERROR] Could not open CSV file for writing after retries: {csv_output_path}")
+            return 0, 1
+
+        writer = csv.writer(csvfile)
+        if not csv_exists:
+            writer.writerow(['filename', 'caption'])
+
+        for image_file in tqdm(image_files, desc=f"Captioning {category_name}"):
                 # Check daily limit
                 if processed >= max_images_today:
                     print(f"\n[INFO] Daily limit reached ({max_images_today})")
