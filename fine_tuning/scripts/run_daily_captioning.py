@@ -17,9 +17,11 @@ def run_captioning_for_category(category, api_keys, data_root="data_backup", bat
     print(f"Using {len(api_keys)} API key(s)")
     print(f"Batch size: {batch_size} images per key")
     # Construct command
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    batch_script = os.path.join(script_dir, "gemini_caption_csv_batch.py")
     cmd = [
         sys.executable,
-        "gemini_caption_csv_batch.py",
+        batch_script,
         "--category", category,
         "--data-root", data_root,
         "--batch-size", "125",

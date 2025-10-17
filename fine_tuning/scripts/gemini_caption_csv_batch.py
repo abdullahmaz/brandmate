@@ -94,58 +94,56 @@ class BatchGeminiFashionCaptioner:
         """Get category-specific system instruction for better captions"""
         
         base_instruction = (
-            "You are an expert fashion image captioning assistant specializing in Pakistani clothing. "
-            "Generate precise, detailed captions for model fine-tuning. "
-            "CRITICAL: Always start with clothing and fashion details first. Background and model details come last. "
+            "You are an expert at creating image captions for AI model training. "
+            "Generate concise, descriptive captions that describe what is visible in the image. "
+            "CRITICAL RULES: "
+            "1. ALWAYS start with 'A man wearing' or 'A woman wearing' (never 'The model' or 'This person') "
+            "2. Focus on clothing description first (fabric, color, style, patterns) "
+            "3. Then briefly mention pose/setting if relevant "
+            "4. Write 1-2 sentences maximum "
+            "5. Use simple, direct language like training data "
+            "6. NO explanatory phrases like 'This is' or 'The image shows' "
         )
         
-        category_specific = {
+        category_instructions = {
+            "Summer_Men": (
+                "Caption Pakistani men's summer clothing. "
+                "Start with 'A man wearing' then describe: shalwar kameez, kurta, lawn fabric, "
+                "cotton clothing, colors, patterns, collar styles. "
+                "Example: 'A man wearing a white cotton shalwar kameez with mandarin collar, standing indoors.' "
+            ),
+            "Summer_Women": (
+                "Caption Pakistani women's summer clothing. "
+                "Start with 'A woman wearing' then describe: lawn suits, three-piece sets, "
+                "dupatta, printed fabrics, colors, patterns. "
+                "Example: 'A woman wearing a floral printed lawn suit with matching dupatta, posed elegantly.' "
+            ),
             "Winter_Men": (
-                "Caption Pakistani men's winter formal wear. "
-                "FIRST (sentences 1-2): Describe the clothing in detail - type (waistcoat, coat, sherwani, suit, shalwar kameez), "
-                "fabric (wool, khaddar, blended), colors, patterns (plain, embroidered, printed), "
-                "fit (slim, regular, loose), styling details (buttons, collar, pockets, embroidery). "
-                "LAST (sentence 3): Briefly mention model pose, background, accessories (shoes, watch). "
-                "Use terms: waistcoat, sherwani, shalwar kameez, kurta, formal wear, winter clothing."
+                "Caption Pakistani men's winter clothing. "
+                "Start with 'A man wearing' then describe: waistcoats, sherwanis, formal suits, "
+                "wool fabric, khaddar, embroidery, colors. "
+                "Example: 'A man wearing a navy blue wool waistcoat with gold embroidery, formal pose.' "
             ),
             "Winter_Women": (
                 "Caption Pakistani women's winter clothing. "
-                "FIRST (sentences 1-2): Describe the clothing in detail - outfit type (khaddar suit, shawl, three-piece unstitched), "
-                "fabric (khaddar, karandi, linen, wool), colors, print patterns (floral, geometric, striped), "
-                "embroidery details, styling, dupatta design. "
-                "LAST (sentence 3): Briefly mention model appearance, pose, background. "
-                "Use terms: khaddar, three-piece, unstitched, dupatta, printed, embroidered, winter collection."
-            ),
-            "Summer_Men": (
-                "Caption Pakistani men's summer eastern wear. "
-                "FIRST (sentences 1-2): Describe the clothing in detail - type (kurta, shalwar kameez, casual eastern wear), "
-                "fabric (lawn, cotton, linen, cambric), colors, patterns, fit, collar style, embroidery or prints. "
-                "LAST (sentence 3): Briefly mention model styling, pose, background. "
-                "Use terms: shalwar kameez, kurta, lawn fabric, summer wear, eastern clothing, casual."
-            ),
-            "Summer_Women": (
-                "Caption Pakistani women's summer lawn clothing. "
-                "FIRST (sentences 1-2): Describe the clothing in detail - outfit type (lawn suit, unstitched fabric, three-piece, printed lawn), "
-                "fabric quality (lawn, cotton, silk blend), colors, print style (floral, abstract, traditional), "
-                "design details, embroidery, embellishments, dupatta pattern. "
-                "LAST (sentence 3): Briefly mention styling and background. "
-                "Use terms: lawn fabric, unstitched, three-piece suit, printed, summer collection, dupatta."
+                "Start with 'A woman wearing' then describe: khaddar suits, shawls, wool fabric, "
+                "winter patterns, embroidered clothing, colors. "
+                "Example: 'A woman wearing a burgundy khaddar suit with embroidered details and shawl.' "
             )
         }
         
-        specific = category_specific.get(category, "")
+        specific = category_instructions.get(category, "")
         
-        closing = (
+        format_instruction = (
             "\n\nFormat requirements: "
-            "Write exactly 3 sentences in a single paragraph. "
-            "Sentences 1-2: Focus ONLY on clothing (fabric, color, pattern, style, cut, embroidery). "
-            "Sentence 3: Mention model, pose, and background ONLY. "
-            "Write in one continuous paragraph with NO line breaks. "
-            "Do NOT start with phrases like 'Here is a caption for the image:' - start directly with clothing description. "
-            "Use clear, factual language. Be specific about colors, fabrics, and clothing types."
+            "Write 1-2 short sentences. "
+            "Sentence 1: 'A [man/woman] wearing [clothing description with fabric, color, style]' "
+            "Sentence 2 (optional): Brief pose or setting description. "
+            "Use simple, factual language suitable for AI training data. "
+            "NO line breaks, NO explanatory introductions."
         )
         
-        return base_instruction + specific + closing
+        return base_instruction + specific + format_instruction
     
     def generate_caption(self, image_path, category):
         """Generate caption for a single image using Gemini"""
@@ -175,7 +173,7 @@ class BatchGeminiFashionCaptioner:
             # 1. Remove newlines (replace with spaces)
             caption = caption.replace('\n\n', ' ').replace('\n', ' ')
             
-            # 2. Remove common preambles
+            # 2. Remove common preambles and fix format
             preambles = [
                 "Here is a caption for the image:",
                 "Here is a caption:",
@@ -183,24 +181,53 @@ class BatchGeminiFashionCaptioner:
                 "Here's a caption:",
                 "Caption:",
                 "This image shows:",
+                "The image shows:",
+                "This is a",
+                "This shows a",
             ]
             for preamble in preambles:
-                if caption.startswith(preamble):
+                if caption.lower().startswith(preamble.lower()):
                     caption = caption[len(preamble):].strip()
+                    # If it started with "This is a", add "A" back to start properly
+                    if preamble.lower() in ["this is a", "this shows a"]:
+                        caption = "A " + caption
                     break
             
-            # 3. Ensure no extra whitespace
+            # 3. Fix format to ensure proper training style
+            # Convert "The model/person is wearing" to "A man/woman wearing"
+            if caption.startswith("The model is wearing"):
+                if "Men" in category:
+                    caption = "A man wearing" + caption[19:]  # Remove "The model is wearing"
+                else:
+                    caption = "A woman wearing" + caption[19:]
+            elif caption.startswith("The person is wearing"):
+                if "Men" in category:
+                    caption = "A man wearing" + caption[20:]  # Remove "The person is wearing"
+                else:
+                    caption = "A woman wearing" + caption[20:]
+            elif caption.startswith("The man is wearing"):
+                caption = "A man wearing" + caption[17:]  # Remove "The man is wearing"
+            elif caption.startswith("The woman is wearing"):
+                caption = "A woman wearing" + caption[19:]  # Remove "The woman is wearing"
+            
+            # 4. Ensure no extra whitespace
             caption = ' '.join(caption.split())
             
             return caption
             
         except Exception as e:
-            print(f"\n[ERROR] Failed to process {image_path}: {e}")
-            return None
+            error_str = str(e).lower()
+            if "quota" in error_str or "limit" in error_str:
+                print(f"\n[ERROR] Quota exceeded: {e}")
+                # This is a quota error - should trigger key rotation
+                raise Exception(f"QUOTA_EXCEEDED: {e}")
+            else:
+                print(f"\n[ERROR] Failed to process {image_path}: {e}")
+                return None
     
     def load_progress_state(self, category_name):
         """Load processing progress for resuming"""
-        progress_file = f".caption_progress_{category_name}.json"
+        progress_file = f"progress/.caption_progress_{category_name}.json"
         
         if os.path.exists(progress_file):
             try:
@@ -228,7 +255,7 @@ class BatchGeminiFashionCaptioner:
     
     def save_progress_state(self, category_name, state):
         """Save processing progress"""
-        progress_file = f".caption_progress_{category_name}.json"
+        progress_file = f"progress/.caption_progress_{category_name}.json"
         
         try:
             with open(progress_file, 'w') as f:
@@ -320,9 +347,25 @@ class BatchGeminiFashionCaptioner:
                 try:
                     caption = self.generate_caption(image_path, category_name)
                 except Exception as e:
-                    print(f"\n[ERROR] Quota or API error: {e}")
-                    print(f"[INFO] Stopping further processing for {category_name} today.")
-                    break
+                    error_str = str(e).lower()
+                    if "quota_exceeded" in error_str:
+                        print(f"\n[INFO] Quota exceeded for API key #{self.current_key_index + 1}")
+                        print(f"[INFO] Attempting to rotate to next API key...")
+                        if self._rotate_key():
+                            batch_processed = 0
+                            print(f"[INFO] Retrying with new API key...")
+                            try:
+                                caption = self.generate_caption(image_path, category_name)
+                            except Exception as retry_e:
+                                print(f"\n[ERROR] Retry failed: {retry_e}")
+                                caption = None
+                        else:
+                            print(f"\n[INFO] All API keys exhausted. Stopping processing.")
+                            break
+                    else:
+                        print(f"\n[ERROR] Other API error: {e}")
+                        errors += 1
+                        continue
                 if caption:
                     try:
                         writer.writerow([image_file, caption])
@@ -377,7 +420,7 @@ def main():
         '--csv-output',
         type=str,
         default=None,
-        help='CSV output file path (default: captions_<category>_<date>.csv)'
+        help='CSV output file path (default: captions/captions_<category>_<date>.csv)'
     )
     parser.add_argument(
         '--batch-size',
@@ -428,7 +471,7 @@ def main():
         csv_output_path = args.csv_output
     else:
         today = date.today().strftime('%Y%m%d')
-        csv_output_path = f"captions_{args.category}_{today}.csv"
+        csv_output_path = f"captions/captions_{args.category}_{today}.csv"
     
     # Process category
     processed, errors = captioner.process_category(

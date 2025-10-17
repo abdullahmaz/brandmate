@@ -36,7 +36,7 @@ echo.
 
 REM Run the daily processing script
 echo Starting daily caption processing...
-python run_daily_captioning.py
+python scripts/run_daily_captioning.py
 
 REM Pause to see results
 echo.

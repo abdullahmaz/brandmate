@@ -12,8 +12,8 @@ This system processes fashion images using Google Gemini API with the following 
 
 ## Files
 
-- `gemini_caption_csv_batch.py` - Main batch captioning script
-- `run_daily_captioning.py` - Daily runner script for all categories
+- `scripts/gemini_caption_csv_batch.py` - Main batch captioning script
+- `scripts/run_daily_captioning.py` - Daily runner script for all categories
 - `run_daily_captioning.bat` - Windows batch file for easy execution
 
 ## Setup
@@ -28,7 +28,7 @@ pip install google-generativeai Pillow tqdm
 
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create up to 5 API keys
-3. Edit `run_daily_captioning.py` and replace the placeholder API keys:
+3. Edit `scripts/run_daily_captioning.py` and replace the placeholder API keys:
 
 ```python
 API_KEYS = [
@@ -52,7 +52,7 @@ run_daily_captioning.bat
 
 **Command Line:**
 ```bash
-python run_daily_captioning.py
+python scripts/run_daily_captioning.py
 ```
 
 This will process all 4 categories (Summer_Men, Summer_Women, Winter_Men, Winter_Women) with your configured API keys.
@@ -60,7 +60,7 @@ This will process all 4 categories (Summer_Men, Summer_Women, Winter_Men, Winter
 ### Manual Single Category
 
 ```bash
-python gemini_caption_csv_batch.py \
+python scripts/gemini_caption_csv_batch.py \
     --category Summer_Men \
     --api-keys "key1" "key2" "key3" "key4" "key5" \
     --data-root data_backup \
@@ -85,10 +85,10 @@ python gemini_caption_csv_batch.py \
 ### Output Files
 
 **CSV Files:**
-- `captions_Summer_Men_20251014.csv`
-- `captions_Summer_Women_20251014.csv` 
-- `captions_Winter_Men_20251014.csv`
-- `captions_Winter_Women_20251014.csv`
+- `captions/captions_Summer_Men_20251014.csv`
+- `captions/captions_Summer_Women_20251014.csv` 
+- `captions/captions_Winter_Men_20251014.csv`
+- `captions/captions_Winter_Women_20251014.csv`
 
 **CSV Format:**
 ```csv
@@ -98,10 +98,10 @@ sm_2.jpg,"Pakistani men's summer shalwar kameez in beige cotton fabric with trad
 ```
 
 **Progress Files (Auto-generated):**
-- `.caption_progress_Summer_Men.json` - Tracks daily progress
-- `.caption_progress_Summer_Women.json`
-- `.caption_progress_Winter_Men.json` 
-- `.caption_progress_Winter_Women.json`
+- `progress/.caption_progress_Summer_Men.json` - Tracks daily progress
+- `progress/.caption_progress_Summer_Women.json`
+- `progress/.caption_progress_Winter_Men.json` 
+- `progress/.caption_progress_Winter_Women.json`
 
 ### Resume Capability
 
