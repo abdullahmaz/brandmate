@@ -2,11 +2,20 @@
 
 # Downloaded Images and Data
 data/
+data_backup/
 *.jpg
 *.jpeg
 *.png
 *.webp
 *.gif
+
+# Generated Caption Files (large, frequently changing)
+captions/
+*.csv
+
+# Progress Files (temporary state)
+progress/
+*.json
 
 # Log Files
 *.log

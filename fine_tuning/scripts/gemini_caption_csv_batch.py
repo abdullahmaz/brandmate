@@ -73,6 +73,11 @@ class BatchGeminiFashionCaptioner:
     
     def _configure_current_key(self):
         """Configure Gemini with current API key"""
+        # Safety check for valid key index
+        if self.current_key_index >= len(self.api_keys):
+            print(f"[WARNING] Key index {self.current_key_index} out of range for {len(self.api_keys)} keys")
+            self.current_key_index = 0  # Reset to first key
+        
         genai.configure(api_key=self.api_keys[self.current_key_index])
     
     def _should_rotate_key(self, batch_processed):
@@ -276,6 +281,12 @@ class BatchGeminiFashionCaptioner:
         # Load progress state
         state = self.load_progress_state(category_name)
         self.current_key_index = state['current_key_index']
+        
+        # Validate key index for current number of API keys
+        if self.current_key_index >= len(self.api_keys):
+            print(f"[WARNING] Previous key index {self.current_key_index} out of range for {len(self.api_keys)} keys, resetting to 0")
+            self.current_key_index = 0
+            
         self.images_processed_today = state['processed']
         batch_processed = state['batch_processed']
         # Configure current key
@@ -420,7 +431,7 @@ def main():
         '--csv-output',
         type=str,
         default=None,
-        help='CSV output file path (default: captions/captions_<category>_<date>.csv)'
+        help='CSV output file path (default: captions/captions_<category>.csv)'
     )
     parser.add_argument(
         '--batch-size',
@@ -470,8 +481,8 @@ def main():
     if args.csv_output:
         csv_output_path = args.csv_output
     else:
-        today = date.today().strftime('%Y%m%d')
-        csv_output_path = f"captions/captions_{args.category}_{today}.csv"
+        # Use fixed filename without date for continuous appending
+        csv_output_path = f"captions/captions_{args.category}.csv"
     
     # Process category
     processed, errors = captioner.process_category(
