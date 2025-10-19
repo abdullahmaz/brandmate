@@ -17,6 +17,24 @@ captions/
 progress/
 *.json
 
+# Training Artifacts
+models/
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# Training Logs & Cache
+wandb/
+lightning_logs/
+__pycache__/
+*.log
+.tensorboard/
+
+# Hugging Face Cache
+.cache/
+transformers_cache/
+
 # Log Files
 *.log
 scraper_log_*.log

@@ -1,3 +1,4 @@
+# Web Scraping & Data Processing
 bs4
 requests
 beautifulsoup4
@@ -5,11 +6,32 @@ lxml
 selenium
 webdriver-manager
 pandas
-Pillow
-tqdm
+Pillow>=9.5.0
+tqdm>=4.65.0
 python-dotenv
+numpy>=1.24.0
 
-# For auto-captioning (optional - only needed for caption generation)
+# Machine Learning & AI (for captioning and fine-tuning)
 transformers>=4.30.0
 torch>=2.0.0
+torchvision>=0.15.0
 accelerate>=0.20.0
+
+# Fine-Tuning Specific Dependencies
+diffusers>=0.21.0
+peft>=0.4.0
+safetensors>=0.3.0
+
+# Image Processing & Augmentation
+opencv-python>=4.8.0
+albumentations>=1.3.0
+
+# Training Optimization (optional but recommended)
+xformers>=0.0.20  # For memory optimization
+bitsandbytes>=0.41.0  # For 8-bit training
+
+# Monitoring & Logging
+wandb>=0.15.0
+
+# Performance (Linux/Windows with WSL)
+triton>=2.0.0  # CUDA acceleration (optional)
