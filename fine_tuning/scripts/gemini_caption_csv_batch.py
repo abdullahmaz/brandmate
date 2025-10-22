@@ -3,7 +3,7 @@ Fashion Image Captioning using Google Gemini API - CSV Output with Batch Process
 Features:
 - Outputs captions to CSV file (filename, caption)
 - Processes images in batches of 100 per API key
-- Rotates through multiple API keys (up to 5)
+- Rotates through multiple API keys (up to 8)
 - Daily processing workflow with resume capability
 - Progress tracking and state persistence
 """
@@ -38,7 +38,7 @@ class BatchGeminiFashionCaptioner:
         Initialize Gemini captioner with batch processing and multiple API keys
         
         Args:
-            api_keys: List of Gemini API keys (up to 5)
+            api_keys: List of Gemini API keys (up to 8)
             batch_size: Number of images to process per API key (default: 100)
             wait_time: Wait time between requests (seconds)
         """
@@ -49,9 +49,9 @@ class BatchGeminiFashionCaptioner:
             print("Get your API key from: https://aistudio.google.com/apikey")
             exit(1)
         
-        if len(api_keys) > 5:
-            print(f"\n[WARNING] Using only first 5 API keys (provided {len(api_keys)})")
-            api_keys = api_keys[:5]
+        if len(api_keys) > 8:
+            print(f"\n[WARNING] Using only first 8 API keys (provided {len(api_keys)})")
+            api_keys = api_keys[:8]
         
         self.api_keys = api_keys
         self.batch_size = batch_size
@@ -412,7 +412,7 @@ def main():
         type=str,
         nargs='+',
         required=True,
-        help='Google Gemini API keys (up to 5 keys)'
+        help='Google Gemini API keys (up to 8 keys)'
     )
     parser.add_argument(
         '--category',

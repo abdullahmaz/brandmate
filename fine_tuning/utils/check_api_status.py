@@ -28,7 +28,7 @@ def load_api_keys():
         load_dotenv(env_path)
         
         api_keys = []
-        for i in range(1, 6):  # Load up to 5 API keys
+        for i in range(1, 9):  # Load up to 8 API keys
             key = os.getenv(f'GEMINI_API_KEY_{i}')
             if key:
                 api_keys.append(key)
