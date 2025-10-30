@@ -107,7 +107,7 @@ def estimate_available_quota(api_keys):
         try:
             import google.generativeai as genai
             genai.configure(api_key=key)
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp')  # Pro model
             
             # Test with a simple prompt
             response = model.generate_content("Test")

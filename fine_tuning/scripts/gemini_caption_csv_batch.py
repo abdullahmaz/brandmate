@@ -57,7 +57,7 @@ class BatchGeminiFashionCaptioner:
         self.batch_size = batch_size
         self.current_key_index = 0
         self.wait_time = wait_time
-        self.model_name = "gemini-2.0-flash-exp"
+        self.model_name = "gemini-2.0-flash-thinking-exp"  # Pro model with better reasoning
         self.images_processed_today = 0
         self.max_images_per_day = len(api_keys) * batch_size
         
