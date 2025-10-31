@@ -6,6 +6,7 @@ Uses LoRA (Low-Rank Adaptation) for efficient training
 """
 
 import os
+import sys
 import json
 import csv
 import random
@@ -24,7 +25,21 @@ from diffusers.optimization import get_scheduler
 from peft import LoraConfig, get_peft_model
 from accelerate import Accelerator
 from tqdm import tqdm
-import wandb
+from torch.utils.data import random_split
+import re
+
+# Fix Windows console encoding
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# Optional wandb import
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 class FashionDataset(Dataset):
     """Dataset for fashion images and captions with augmentations"""
@@ -171,19 +186,35 @@ class FashionDataset(Dataset):
 class FashionLoRATrainer:
     """LoRA trainer for fashion Stable Diffusion model"""
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, resume_from_checkpoint=None):
         self.config = config
-        self.accelerator = Accelerator()
+        self.start_epoch = 0
+        # Enable mixed precision training for better performance and memory efficiency
+        kwargs = {}
+        if self.config.get("mixed_precision", "fp16") in ["fp16", "bf16"]:
+            kwargs["mixed_precision"] = self.config.get("mixed_precision", "fp16")
+        self.accelerator = Accelerator(**kwargs)
         
         # Initialize models
-        self._load_models()
+        self._load_models(resume_from_checkpoint)
         
-        # Setup LoRA
-        self._setup_lora()
+        # Setup LoRA and get starting epoch
+        checkpoint_epoch = self._setup_lora()
+        
+        # Adjust total epochs to continue training beyond checkpoint
+        if checkpoint_epoch > 0 and self.config["epochs"] <= checkpoint_epoch:
+            # If resuming and total epochs <= checkpoint epoch, train additional epochs
+            additional_epochs = max(5, self.config.get("additional_epochs", 5))
+            self.config["epochs"] = checkpoint_epoch + additional_epochs
+            print(f"[INFO] Training will continue for {additional_epochs} additional epochs (total: {self.config['epochs']})")
+        else:
+            self.start_epoch = checkpoint_epoch
         
         print(f"Training on device: {self.accelerator.device}")
+        if kwargs.get("mixed_precision"):
+            print(f"Mixed precision: {kwargs['mixed_precision']}")
     
-    def _load_models(self):
+    def _load_models(self, resume_from_checkpoint=None):
         """Load Stable Diffusion components"""
         model_id = self.config["model_id"]
         print(f"Loading models from: {model_id}")
@@ -201,6 +232,12 @@ class FashionLoRATrainer:
         self.unet = UNet2DConditionModel.from_pretrained(
             model_id, subfolder="unet"
         )
+        
+        # Enable gradient checkpointing for memory efficiency
+        if hasattr(self.unet, 'enable_gradient_checkpointing'):
+            self.unet.enable_gradient_checkpointing()
+        if hasattr(self.text_encoder, 'enable_gradient_checkpointing'):
+            self.text_encoder.gradient_checkpointing_enable()
         self.noise_scheduler = DDPMScheduler.from_pretrained(
             model_id, subfolder="scheduler"
         )
@@ -209,9 +246,54 @@ class FashionLoRATrainer:
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
         self.unet.requires_grad_(False)
+        
+        # Store resume checkpoint path
+        self.resume_from_checkpoint = resume_from_checkpoint
+        
+        # VAE will be moved to device by accelerator.prepare()
     
-    def _setup_lora(self):
+    def _setup_lora(self, subsequent_epochs=0):
         """Setup LoRA adapters for UNet and Text Encoder"""
+        # If resuming, load LoRA weights first
+        if self.resume_from_checkpoint:
+            checkpoint_path = Path(self.resume_from_checkpoint)
+            unet_lora_path = checkpoint_path / "unet_lora"
+            text_encoder_lora_path = checkpoint_path / "text_encoder_lora"
+            
+            if unet_lora_path.exists() and text_encoder_lora_path.exists():
+                print(f"Loading LoRA weights from checkpoint...")
+                # Load LoRA weights directly using PeftModel.from_pretrained
+                from peft import PeftModel
+                
+                # Load LoRA adapters directly on base models
+                self.unet = PeftModel.from_pretrained(self.unet, unet_lora_path)
+                self.text_encoder = PeftModel.from_pretrained(self.text_encoder, text_encoder_lora_path)
+                
+                # Ensure LoRA parameters have gradients enabled
+                for name, param in self.unet.named_parameters():
+                    if 'lora' in name.lower():
+                        param.requires_grad = True
+                for name, param in self.text_encoder.named_parameters():
+                    if 'lora' in name.lower():
+                        param.requires_grad = True
+                
+                print(f"[OK] Loaded LoRA weights from checkpoint")
+                # Get epoch number from checkpoint
+                if "checkpoint-final" in str(checkpoint_path):
+                    config_file = checkpoint_path / "training_config.json"
+                    if config_file.exists():
+                        with open(config_file) as f:
+                            checkpoint_config = json.load(f)
+                            epoch_num = checkpoint_config.get("epochs", 10)
+                else:
+                    try:
+                        epoch_num = int(checkpoint_path.name.split("-")[1])
+                    except:
+                        epoch_num = 10
+                
+                print(f"   Continuing from epoch {epoch_num + 1}")
+                return epoch_num
+        
         # LoRA config for UNet
         unet_lora_config = LoraConfig(
             r=self.config["lora_rank"],
@@ -237,6 +319,7 @@ class FashionLoRATrainer:
         self.text_encoder = get_peft_model(self.text_encoder, text_encoder_lora_config)
         
         print(f"LoRA setup complete - Rank: {self.config['lora_rank']}, Alpha: {self.config['lora_alpha']}")
+        return 0
     
     def _encode_text(self, captions: List[str]):
         """Encode text captions using CLIP text encoder"""
@@ -248,16 +331,114 @@ class FashionLoRATrainer:
             return_tensors="pt"
         )
         
-        with torch.no_grad():
-            text_embeddings = self.text_encoder(inputs.input_ids.to(self.accelerator.device))[0]
+        # Remove torch.no_grad() to allow LoRA gradients to flow through text encoder
+        # Since we're training LoRA adapters on text encoder, we need gradients
+        text_embeddings = self.text_encoder(inputs.input_ids.to(self.accelerator.device))[0]
         
         return text_embeddings
     
-    def train(self, train_dataloader: DataLoader):
-        """Main training loop"""
+    def _clean_caption(self, caption: str) -> str:
+        """Clean and validate caption text"""
+        # Remove weird characters but keep basic punctuation
+        caption = re.sub(r'[^\w\s\.,\!\?\-\'\(\)]', '', caption)
+        # Remove extra whitespace
+        caption = ' '.join(caption.split())
+        # Ensure minimum length
+        if len(caption) < 5:
+            return caption + " fashion clothing"
+        return caption
+    
+    def _generate_sample_images(self, epoch: int, step: int):
+        """Generate sample images during training for visual evaluation"""
+        if not self.config.get("generate_samples", True):
+            return
+        
+        sample_interval = self.config.get("sample_interval", 500)  # Every N steps
+        if step % sample_interval != 0 or step == 0:
+            return
+        
+        try:
+            # Use only on main process
+            if not self.accelerator.is_main_process:
+                return
+            
+            # Test prompts for evaluation
+            test_prompts = [
+                "pakistani men's shalwar kameez, traditional eastern clothing",
+                "women's eastern wear, summer fashion",
+                "winter kurta with embroidery, elegant style"
+            ]
+            
+            # Note: Full pipeline generation requires loading inference pipeline
+            # This is a placeholder - full implementation would load pipeline with current LoRA weights
+            print(f"[Sample Generation] Epoch {epoch}, Step {step}: Would generate samples for prompts")
+            if self.config.get("use_wandb", False) and WANDB_AVAILABLE:
+                wandb.log({
+                    "sample_generation_step": step,
+                    "sample_epoch": epoch
+                })
+        except Exception as e:
+            print(f"Warning: Sample generation failed: {e}")
+    
+    def _validate(self, val_dataloader: DataLoader) -> float:
+        """Run validation and return validation loss"""
+        self.unet.eval()
+        self.text_encoder.eval()
+        
+        total_val_loss = 0
+        val_steps = 0
+        
+        with torch.no_grad():
+            for batch in val_dataloader:
+                # Encode images to latent space
+                pixel_values = batch["pixel_values"].to(self.accelerator.device)
+                with torch.no_grad():
+                    latents = self.vae.encode(pixel_values).latent_dist.sample()
+                    latents = latents * self.vae.config.scaling_factor
+                
+                # Add noise
+                noise = torch.randn_like(latents)
+                timesteps = torch.randint(
+                    0, self.noise_scheduler.config.num_train_timesteps,
+                    (latents.shape[0],), device=latents.device
+                ).long()
+                noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps)
+                
+                # Encode text
+                text_embeddings = self._encode_text(batch["caption"])
+                
+                # Predict noise
+                noise_pred = self.unet(noisy_latents, timesteps, text_embeddings).sample
+                
+                # Calculate loss
+                loss = F.mse_loss(noise_pred, noise, reduction="mean")
+                total_val_loss += loss.item()
+                val_steps += 1
+        
+        avg_val_loss = total_val_loss / val_steps if val_steps > 0 else 0
+        return avg_val_loss
+    
+    def train(self, train_dataloader: DataLoader, val_dataloader: DataLoader = None):
+        """Main training loop with optional validation"""
         # Setup optimizer and scheduler
+        # Only optimize trainable parameters (LoRA adapters that require grad)
+        trainable_params = []
+        
+        # Collect only parameters that require gradients
+        for param in self.unet.parameters():
+            if param.requires_grad:
+                trainable_params.append(param)
+        
+        for param in self.text_encoder.parameters():
+            if param.requires_grad:
+                trainable_params.append(param)
+        
+        if len(trainable_params) == 0:
+            raise ValueError("No trainable parameters found! Check LoRA setup.")
+        
+        print(f"Training {len(trainable_params)} parameter groups")
         optimizer = torch.optim.AdamW(
-            list(self.unet.parameters()) + list(self.text_encoder.parameters()),
+            trainable_params,
             lr=self.config["learning_rate"],
             weight_decay=self.config["weight_decay"]
         )
@@ -270,14 +451,27 @@ class FashionLoRATrainer:
         )
         
         # Prepare for distributed training
-        self.unet, self.text_encoder, optimizer, train_dataloader, lr_scheduler = self.accelerator.prepare(
-            self.unet, self.text_encoder, optimizer, train_dataloader, lr_scheduler
-        )
+        # Include VAE in prepare list to ensure it's on the correct device
+        prepare_list = [self.unet, self.text_encoder, self.vae, optimizer, train_dataloader, lr_scheduler]
+        if val_dataloader is not None:
+            prepare_list.append(val_dataloader)
+        
+        prepared = self.accelerator.prepare(*prepare_list)
+        self.unet, self.text_encoder, self.vae, optimizer, train_dataloader, lr_scheduler = prepared[:6]
+        if val_dataloader is not None:
+            val_dataloader = prepared[6]
         
         # Training loop
-        print(f"Starting training for {self.config['epochs']} epochs...")
+        total_epochs = self.config["epochs"]
+        start_epoch = self.start_epoch
+        print(f"Starting training for {total_epochs} total epochs (starting from epoch {start_epoch + 1})...")
         
-        for epoch in range(self.config["epochs"]):
+        if start_epoch >= total_epochs:
+            print(f"[WARNING] Already trained {start_epoch} epochs. Total epochs is {total_epochs}.")
+            print(f"   No new epochs to train. Increase --epochs to continue training.")
+            return
+        
+        for epoch in range(start_epoch, total_epochs):
             self.unet.train()
             self.text_encoder.train()
             
@@ -300,8 +494,9 @@ class FashionLoRATrainer:
                     ).long()
                     noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps)
                     
-                    # Encode text
-                    text_embeddings = self._encode_text(batch["caption"])
+                    # Clean and encode text
+                    cleaned_captions = [self._clean_caption(cap) for cap in batch["caption"]]
+                    text_embeddings = self._encode_text(cleaned_captions)
                     
                     # Predict noise
                     noise_pred = self.unet(noisy_latents, timesteps, text_embeddings).sample
@@ -324,6 +519,10 @@ class FashionLoRATrainer:
                 
                 # Update progress
                 total_loss += loss.detach().item()
+                
+                # Generate sample images periodically
+                self._generate_sample_images(epoch, step)
+                
                 progress_bar.set_postfix({
                     "loss": f"{loss.item():.4f}",
                     "avg_loss": f"{total_loss/(step+1):.4f}",
@@ -331,19 +530,31 @@ class FashionLoRATrainer:
                 })
                 
                 # Log to wandb
-                if self.config.get("use_wandb", False):
+                if self.config.get("use_wandb", False) and WANDB_AVAILABLE:
                     wandb.log({
-                        "loss": loss.item(),
+                        "train_loss": loss.item(),
                         "learning_rate": lr_scheduler.get_last_lr()[0],
                         "epoch": epoch,
                         "step": step
                     })
             
+            # Run validation
+            avg_val_loss = None
+            if val_dataloader is not None:
+                avg_val_loss = self._validate(val_dataloader)
+                print(f"Epoch {epoch+1} - Train Loss: {total_loss/len(train_dataloader):.4f}, Val Loss: {avg_val_loss:.4f}")
+                
+                if self.config.get("use_wandb", False) and WANDB_AVAILABLE:
+                    wandb.log({
+                        "val_loss": avg_val_loss,
+                        "epoch": epoch
+                    })
+            else:
+                print(f"Epoch {epoch+1} completed - Average Loss: {total_loss/len(train_dataloader):.4f}")
+            
             # Save checkpoint
             if (epoch + 1) % self.config["save_every"] == 0:
                 self.save_checkpoint(epoch + 1)
-            
-            print(f"Epoch {epoch+1} completed - Average Loss: {total_loss/len(train_dataloader):.4f}")
         
         # Save final model
         self.save_checkpoint("final")
@@ -363,6 +574,47 @@ class FashionLoRATrainer:
             json.dump(self.config, f, indent=2)
         
         print(f"Checkpoint saved to {output_dir}")
+
+class AugmentedFashionDataset(Dataset):
+    """Dataset wrapper that uses pre-loaded image-caption pairs"""
+    def __init__(self, pairs, image_size=512):
+        self.image_caption_pairs = pairs
+        self.image_size = image_size
+        self.augment_level = "mixed"  # Mixed augmentation
+        
+        # Initialize transforms
+        self.base_transform = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5])
+        ])
+    
+    def __len__(self):
+        return len(self.image_caption_pairs)
+    
+    def _apply_augmentation(self, image: Image.Image) -> Image.Image:
+        """Apply random augmentations - reuse logic from FashionDataset"""
+        # Just return image as-is since augmentation was done during dataset creation
+        return image
+    
+    def __getitem__(self, idx):
+        image_path, caption = self.image_caption_pairs[idx]
+        
+        # Load and process image
+        try:
+            image = Image.open(image_path).convert('RGB')
+            image = self._apply_augmentation(image)
+            image_tensor = self.base_transform(image)
+        except Exception as e:
+            print(f"Error loading image {image_path}: {e}")
+            # Return a black image as fallback
+            image_tensor = torch.zeros(3, self.image_size, self.image_size)
+        
+        return {
+            "pixel_values": image_tensor,
+            "caption": caption,
+            "image_path": image_path
+        }
 
 def create_augmented_dataset(data_root: str, captions_root: str, output_dir: str, 
                            target_multiplier: int = 3):
@@ -398,13 +650,47 @@ def main():
     parser.add_argument("--output_dir", type=str, default="models/fashion_lora", help="Output directory for trained model")
     parser.add_argument("--model_id", type=str, default="prompthero/openjourney", help="Base model to fine-tune")
     parser.add_argument("--batch_size", type=int, default=4, help="Training batch size")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=20, help="Total number of training epochs (will continue from checkpoint if resuming)")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--lora_rank", type=int, default=16, help="LoRA rank")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha")
-    parser.add_argument("--augment_multiplier", type=int, default=3, help="Dataset augmentation multiplier")
+    parser.add_argument("--augment_multiplier", type=int, default=2, help="Dataset augmentation multiplier")
     parser.add_argument("--use_wandb", action="store_true", help="Use Weights & Biases for logging")
+    parser.add_argument("--val_split", type=float, default=0.1, help="Validation split ratio (0.1 = 10%%)")
+    parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["no", "fp16", "bf16"], help="Mixed precision training")
+    parser.add_argument("--generate_samples", type=lambda x: x.lower() in ['true', '1', 'yes'], default=True, help="Generate sample images during training (default: True)")
+    parser.add_argument("--no_generate_samples", action="store_false", dest="generate_samples", help="Disable sample generation")
+    parser.add_argument("--sample_interval", type=int, default=500, help="Generate samples every N steps")
+    parser.add_argument("--resume_from", type=str, default=None, help="Resume from checkpoint directory (auto-detects latest if not specified)")
     args = parser.parse_args()
+    
+    # Find latest checkpoint if resuming
+    resume_from_checkpoint = args.resume_from
+    if resume_from_checkpoint is None:
+        output_path = Path(args.output_dir)
+        if output_path.exists():
+            checkpoints = []
+            for checkpoint_dir in output_path.iterdir():
+                if checkpoint_dir.is_dir() and checkpoint_dir.name.startswith("checkpoint-"):
+                    try:
+                        if checkpoint_dir.name == "checkpoint-final":
+                            config_file = checkpoint_dir / "training_config.json"
+                            if config_file.exists():
+                                with open(config_file) as f:
+                                    config = json.load(f)
+                                    epoch_num = config.get("epochs", 10)
+                                    checkpoints.append((epoch_num, checkpoint_dir))
+                        else:
+                            epoch_num = int(checkpoint_dir.name.split("-")[1])
+                            checkpoints.append((epoch_num, checkpoint_dir))
+                    except (ValueError, IndexError):
+                        continue
+            
+            if checkpoints:
+                checkpoints.sort(key=lambda x: x[0], reverse=True)
+                resume_from_checkpoint = str(checkpoints[0][1])
+                print(f"[CHECKPOINT] Found existing checkpoint: {resume_from_checkpoint}")
+                print(f"   Will resume training from epoch {checkpoints[0][0] + 1}")
     
     # Training configuration
     config = {
@@ -421,12 +707,20 @@ def main():
         "warmup_steps": 100,
         "lr_scheduler": "cosine",
         "save_every": 2,
-        "use_wandb": args.use_wandb
+        "use_wandb": args.use_wandb,
+        "mixed_precision": args.mixed_precision,
+        "generate_samples": args.generate_samples,
+        "sample_interval": args.sample_interval
     }
     
     # Initialize wandb if requested
     if args.use_wandb:
-        wandb.init(project="fashion-stable-diffusion", config=config)
+        if WANDB_AVAILABLE:
+            wandb.init(project="fashion-stable-diffusion", config=config)
+        else:
+            print("⚠️  Wandb requested but not installed. Install with: pip install wandb")
+            print("Continuing without wandb logging...")
+            config["use_wandb"] = False
     
     # Create augmented dataset
     augmented_pairs = create_augmented_dataset(
@@ -436,31 +730,51 @@ def main():
         args.augment_multiplier
     )
     
-    # Create dataset and dataloader
-    class AugmentedFashionDataset(FashionDataset):
-        def __init__(self, pairs, image_size=512):
-            self.image_caption_pairs = pairs
-            self.image_size = image_size
-            self.augment_level = "mixed"  # Mixed augmentation
-            
-            self.base_transform = transforms.Compose([
-                transforms.Resize((image_size, image_size)),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5])
-            ])
-    
+    # Create dataset from augmented pairs (using module-level class)
     dataset = AugmentedFashionDataset(augmented_pairs)
-    dataloader = DataLoader(
-        dataset, 
+    
+    # Split into train and validation sets
+    val_split = args.val_split
+    if val_split > 0:
+        val_size = int(len(dataset) * val_split)
+        train_size = len(dataset) - val_size
+        train_dataset, val_dataset = random_split(
+            dataset, 
+            [train_size, val_size],
+            generator=torch.Generator().manual_seed(42)  # Reproducible split
+        )
+        print(f"Dataset split: {train_size} train, {val_size} validation ({val_split*100:.1f}%)")
+    else:
+        train_dataset = dataset
+        val_dataset = None
+        print("No validation split (val_split=0)")
+    
+    # Use num_workers=0 on Windows to avoid multiprocessing issues
+    # Windows uses spawn instead of fork, which has pickling issues with nested classes
+    import platform
+    num_workers = 0 if platform.system() == 'Windows' else 4
+    
+    train_dataloader = DataLoader(
+        train_dataset, 
         batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=4,
-        pin_memory=True
+        num_workers=num_workers,
+        pin_memory=True if num_workers > 0 else False
     )
     
+    val_dataloader = None
+    if val_dataset is not None:
+        val_dataloader = DataLoader(
+            val_dataset,
+            batch_size=config["batch_size"],
+            shuffle=False,
+            num_workers=0 if platform.system() == 'Windows' else 2,
+            pin_memory=True if num_workers > 0 else False
+        )
+    
     # Initialize trainer and start training
-    trainer = FashionLoRATrainer(config)
-    trainer.train(dataloader)
+    trainer = FashionLoRATrainer(config, resume_from_checkpoint=resume_from_checkpoint)
+    trainer.train(train_dataloader, val_dataloader)
     
     print("Fine-tuning completed!")
     print(f"Model saved to: {args.output_dir}")

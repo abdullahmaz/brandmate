@@ -35,32 +35,33 @@ def check_requirements():
 
 def check_data():
     """Check if data and captions are available"""
-    data_root = Path("data_backup")
-    captions_root = Path("captions")
+    # Paths relative to training/ directory (go up one level to fine_tuning/)
+    data_root = Path("../data_backup")
+    captions_root = Path("../captions")
     
     # Check data directories
     required_dirs = [
-        "../data_backup/Summer/Men",
-        "../data_backup/Summer/Women", 
-        "../data_backup/Winter/Men",
-        "../data_backup/Winter/Women"
+        data_root / "Summer" / "Men",
+        data_root / "Summer" / "Women", 
+        data_root / "Winter" / "Men",
+        data_root / "Winter" / "Women"
     ]
     
     missing_dirs = []
     for dir_path in required_dirs:
-        if not Path(dir_path).exists():
-            missing_dirs.append(dir_path)
+        if not dir_path.exists():
+            missing_dirs.append(str(dir_path))
     
     if missing_dirs:
-        print(f"❌ Missing data directories: {missing_dirs}")
+        print(f"Missing data directories: {missing_dirs}")
         return False
     
     # Check caption files
     required_csvs = [
-        "../captions/captions_Summer_Men.csv",
-        "../captions/captions_Summer_Women.csv",
-        "../captions/captions_Winter_Men.csv", 
-        "../captions/captions_Winter_Women.csv"
+        captions_root / "captions_Summer_Men.csv",
+        captions_root / "captions_Summer_Women.csv",
+        captions_root / "captions_Winter_Men.csv", 
+        captions_root / "captions_Winter_Women.csv"
     ]
     
     missing_csvs = []
@@ -80,7 +81,8 @@ def estimate_training_time(config):
     """Estimate training time based on dataset size and config"""
     # Count total images with captions
     total_images = 0
-    for csv_file in Path("../captions").glob("captions_*.csv"):
+    captions_root = Path("../captions")
+    for csv_file in captions_root.glob("captions_*.csv"):
         try:
             with open(csv_file, 'r') as f:
                 total_images += sum(1 for line in f) - 1  # Subtract header

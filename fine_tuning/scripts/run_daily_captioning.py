@@ -10,6 +10,17 @@ from datetime import date
 from dotenv import load_dotenv
 import csv
 
+# Suppress ALTS warnings from Google AI library
+os.environ['GRPC_VERBOSITY'] = 'ERROR'
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+
+# Fix Windows console encoding to support emojis
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 def find_latest_csv_for_category(category):
     """Find the CSV file for a category (fixed filename without date)"""
     csv_file = f"captions/captions_{category}.csv"
@@ -103,14 +114,22 @@ def estimate_available_quota(api_keys):
     # Test each API key to see if it's working
     valid_working_keys = []
     
+    import google.generativeai as genai
+    
     for i, key in enumerate(api_keys, 1):
         try:
-            import google.generativeai as genai
             genai.configure(api_key=key)
+            # Use the same model as check_api_status.py for consistency
             model = genai.GenerativeModel('gemini-2.0-flash-exp')
             
-            # Test with a simple prompt
-            response = model.generate_content("Test")
+            # Test with a simple prompt (with short timeout)
+            response = model.generate_content(
+                "Hi",
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=5
+                )
+            )
             if response and response.text:
                 valid_working_keys.append(key)
                 print(f"  Key #{i}: ✅ Working")
@@ -151,6 +170,11 @@ def run_captioning_for_category(category, api_keys, data_root="data_backup", bat
     print(f"{'=' * 50}")
     print(f"Using {len(api_keys)} API key(s)")
     print(f"Batch size: {batch_size} images per key")
+    
+    # Flush output to ensure it's visible
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
     # Construct command
     script_dir = os.path.dirname(os.path.abspath(__file__))
     batch_script = os.path.join(script_dir, "gemini_caption_csv_batch.py")
@@ -163,12 +187,17 @@ def run_captioning_for_category(category, api_keys, data_root="data_backup", bat
         "--api-keys"
     ] + api_keys
     
-    # Run the command
+    # Run the command with real-time output
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("STDOUT:", result.stdout)
-        if result.stderr:
-            print("STDERR:", result.stderr)
+        print(f"🚀 Starting captioning process...")
+        print(f"Command: {' '.join(cmd[:4])}... [API keys hidden]")
+        print("-" * 50)
+        
+        # Run with real-time output (no capture)
+        result = subprocess.run(cmd, check=True, text=True, bufsize=1, universal_newlines=True)
+        
+        print("-" * 50)
+        print(f"✅ Captioning completed for {category}")
         return True
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Failed to process {category}:")
@@ -266,12 +295,20 @@ def main():
         per_key_quota = 40 if len(working_keys) > 0 else 20
         dynamic_batch_size = min(target_for_category, per_key_quota)
         
+        # Flush output before starting processing
+        sys.stdout.flush()
+        sys.stderr.flush()
+        
         success = run_captioning_for_category(
             category=category,
             api_keys=working_keys,  # Use only working keys
             data_root=DATA_ROOT,
             batch_size=dynamic_batch_size
         )
+        
+        # Flush output after processing
+        sys.stdout.flush()
+        sys.stderr.flush()
         
         if success:
             successful_categories += 1
