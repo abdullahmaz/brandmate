@@ -246,7 +246,6 @@ fine_tuning/augmentation_preview/
 *.webp
 
 # Model Files and Training Outputs
-models/
 checkpoints/
 *.pkl
 *.pth
@@ -306,3 +305,7 @@ htmlcov/
 # System Files
 .DS_Store
 Thumbs.db
+
+fine_tuning/*.json
+fine_tuning/training/*.json
+fine_tuning/training/wandb
