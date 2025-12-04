@@ -309,3 +309,9 @@ Thumbs.db
 fine_tuning/*.json
 fine_tuning/training/*.json
 fine_tuning/training/wandb
+
+# TextGeneration folder
+TextGeneration/venv/
+TextGeneration/training_data/
+TextGeneration/training_data_v2/
+TextGeneration/models/
