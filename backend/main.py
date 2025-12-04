@@ -7,6 +7,7 @@ import threading
 from dotenv import load_dotenv
 from llm_orchestrator import LLMOrchestrator
 from image_generator import ImageGenerator
+from text_generator import TextGenerator
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
@@ -27,18 +28,19 @@ app.add_middleware(
 # Global variables for components
 llm_orchestrator = None
 image_generator = None
+text_generator = None
 initialization_status = "starting"
 
 def initialize_components_background():
     """Initialize components in a background thread"""
-    global llm_orchestrator, image_generator, initialization_status
+    global llm_orchestrator, image_generator, text_generator, initialization_status
     
     print("Starting background initialization of components...")
     initialization_status = "loading"
     
     # Try to initialize LLM orchestrator
     try:
-        print("Loading LLM Orchestrator...")
+        print("Loading LLM Orchestrator (Llama 3.2)...")
         llm_orchestrator = LLMOrchestrator()
         print("LLM Orchestrator initialized successfully!")
     except Exception as e:
@@ -56,8 +58,18 @@ def initialize_components_background():
         print("Image generation will use placeholder images.")
         image_generator = None
 
+    # Try to initialize text generator (Qwen2)
+    try:
+        print("Loading Text Generator (Qwen2-1.5B)...")
+        text_generator = TextGenerator()
+        print("Text Generator initialized successfully!")
+    except Exception as e:
+        print(f"Error initializing Text Generator: {e}")
+        print("Text generation will use fallback responses.")
+        text_generator = None
+
     # Update status
-    if llm_orchestrator is not None or image_generator is not None:
+    if llm_orchestrator is not None or image_generator is not None or text_generator is not None:
         initialization_status = "ready"
         print("Background initialization completed successfully!")
     else:
@@ -146,7 +158,20 @@ async def process_message(chat_id: str, message: str, conversation_history: list
             elif tool_name == "text_generation":
                 topic = result["parameters"].get("topic", message)
                 content_type = result["parameters"].get("content_type", "marketing_copy")
-                response_message = f"I'll help you create {content_type} content about: {topic}. This feature is coming soon!"
+                
+                # Use Qwen2 text generator if available
+                if text_generator and text_generator.model_loaded:
+                    try:
+                        generated_text = await text_generator.generate_content(
+                            topic=topic,
+                            content_type=content_type
+                        )
+                        response_message = generated_text
+                    except Exception as text_error:
+                        print(f"Text generation error: {text_error}")
+                        response_message = f"I tried to generate {content_type} for '{topic}', but encountered an issue."
+                else:
+                    response_message = f"Text generation service is currently unavailable. Topic: {topic}"
                 
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
@@ -426,7 +451,20 @@ async def chat(request: ChatRequest):
             elif tool_name == "text_generation":
                 topic = result["parameters"].get("topic", request.message)
                 content_type = result["parameters"].get("content_type", "marketing_copy")
-                response_message = f"I'll help you create {content_type} content about: {topic}. This feature is coming soon!"
+                
+                # Use Qwen2 text generator if available
+                if text_generator and text_generator.model_loaded:
+                    try:
+                        generated_text = await text_generator.generate_content(
+                            topic=topic,
+                            content_type=content_type
+                        )
+                        response_message = generated_text
+                    except Exception as text_error:
+                        print(f"Text generation error: {text_error}")
+                        response_message = f"I tried to generate {content_type} for '{topic}', but encountered an issue."
+                else:
+                    response_message = f"Text generation service is currently unavailable. Topic: {topic}"
                 
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", request.message)

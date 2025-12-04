@@ -18,10 +18,9 @@ class LLMOrchestrator:
             # Load model with appropriate settings for 3B model
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                use_safetensors=True,    # Faster loading with safetensors
+                device_map="auto" if torch.cuda.is_available() else None,
+                use_safetensors=True,
             )
             
             # Create pipeline for easier text generation
@@ -30,8 +29,6 @@ class LLMOrchestrator:
                 model=self.model,
                 tokenizer=self.tokenizer,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                batch_size=1,  # Process one at a time for memory efficiency
-                return_tensors="pt"  # Return PyTorch tensors for better performance
             )
             
             print("Llama 3.2 3B Instruct loaded successfully!")
@@ -246,25 +243,25 @@ class LLMOrchestrator:
         Create system content for conversation (without Llama formatting)
         """
 
-        return f"""You are Brandmate, an AI assistant for Eastern clothing brand marketing.
+        return """You are Brandmate, an AI assistant for Eastern clothing brand marketing.
 
-                When users ask for images/posters/visuals, use:
-                <image_generation>
-                {{"parameters": {{"prompt": "description", "style": "eastern_clothing"}}}}
+When users ask for images/posters/visuals, use:
+<image_generation>
+{"parameters": {"prompt": "description", "style": "eastern_clothing"}}
 
-                When users ask for text/captions/copy, use:
-                <text_generation>
-                {{"parameters": {{"topic": "subject", "content_type": "marketing_copy"}}}}
+When users ask for text/captions/copy, use:
+<text_generation>
+{"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
 
-                When users ask for videos, use:
-                <video_generation>
-                {{"parameters": {{"description": "video description", "video_type": "promotional"}}}}
+When users ask for videos, use:
+<video_generation>
+{"parameters": {"description": "video description", "video_type": "promotional"}}
 
-                When users ask for websites, use:
-                <website_generation>
-                {{"parameters": {{"brand_info": "brand details", "page_type": "landing"}}}}
+When users ask for websites, use:
+<website_generation>
+{"parameters": {"brand_info": "brand details", "page_type": "landing"}}
 
-                For general conversation, just respond normally. Always call tools directly without explanations."""
+For general conversation, just respond normally. Always call tools directly without explanations."""
     
     
     def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
