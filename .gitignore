@@ -315,3 +315,6 @@ TextGeneration/venv/
 TextGeneration/training_data/
 TextGeneration/training_data_v2/
 TextGeneration/models/
+
+#ignore start_dev.bat
+start_dev.bat
