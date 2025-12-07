@@ -22,7 +22,7 @@ export function ChatMessage({ role, content, timestamp, image, tool }) {
             )}
           </div>
           
-          <div className="bg-primary text-primary-foreground rounded-lg rounded-tr-sm p-4 break-words overflow-hidden w-fit max-w-full">
+          <div className="bg-primary text-primary-foreground rounded-lg rounded-tr-sm p-4 break-words overflow-hidden w-fit max-w-full whitespace-pre-wrap">
             {content}
           </div>
         </div>
@@ -57,7 +57,7 @@ export function ChatMessage({ role, content, timestamp, image, tool }) {
           )}
         </div>
         
-        <div className="bg-card border border-border text-foreground rounded-lg rounded-tl-sm p-4 break-words overflow-hidden w-fit max-w-full">
+        <div className="bg-card border border-border text-foreground rounded-lg rounded-tl-sm p-4 break-words overflow-hidden w-fit max-w-full whitespace-pre-wrap">
           {content}
           
           {image && (
