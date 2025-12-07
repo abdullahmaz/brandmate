@@ -1,9 +1,19 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
-import { PlusIcon, MessageSquare, PanelLeftClose, Settings, Loader2, Trash2 } from 'lucide-react';
+import {
+  PlusIcon,
+  MessageSquare,
+  PanelLeftClose,
+  Settings,
+  Loader2,
+  Trash2,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
 import { formatDistanceToNow } from 'date-fns';
+import { useTheme } from './ThemeProvider';
 
 /**
  * Chat sidebar component that shows conversations list
@@ -11,6 +21,7 @@ import { formatDistanceToNow } from 'date-fns';
 export function ChatSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
 
   const { data: chats, isLoading } = useChats();
   const deleteChatMutation = useDeleteChat();
@@ -167,13 +178,28 @@ export function ChatSidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-sidebar-border flex-shrink-0">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          <Settings className="h-4 w-4 mr-2" />
-          Settings
-        </Button>
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            className="flex-1 justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-sidebar-foreground hover:bg-sidebar-accent"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
