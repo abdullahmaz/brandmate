@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
-import { Send, StopCircle } from 'lucide-react';
+import { Send, StopCircle, Paperclip, BookOpen, Image, Mic, Smile } from 'lucide-react';
 
 /**
  * Component for chat input with send button
  */
-export function ChatInput({ 
-  onSendMessage, 
-  isLoading = false, 
-  onStop, 
-  placeholder = "How can I help you today?" 
+export function ChatInput({
+  onSendMessage,
+  isLoading = false,
+  onStop,
+  placeholder = 'How can I help you today?',
 }) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef(null);
@@ -45,46 +45,50 @@ export function ChatInput({
   }, [message]);
 
   return (
-    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="max-w-4xl mx-auto p-4">
-        <form onSubmit={handleSubmit} className="relative">
-          <div className="relative flex items-end gap-3 bg-card rounded-lg p-3 shadow-sm">
-            <Textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              className="flex-1 min-h-[44px] max-h-32 resize-none border-0 bg-transparent p-0 focus:ring-0 focus-visible:ring-0"
-              disabled={isLoading}
-              rows={1}
-            />
-            
-            {isLoading ? (
-              <Button
-                type="button"
-                onClick={handleStop}
-                size="icon"
-                variant="ghost"
-                className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <StopCircle className="h-5 w-5" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                size="icon"
-                disabled={!message.trim() || isLoading}
-                className="flex-shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            )}
+    <div className="bg-transparent pb-6">
+      <div className="max-w-3xl mx-auto px-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="relative rounded-2xl border border-border/80 bg-card/90 shadow-xl shadow-black/5">
+            <div className="p-4">
+              <Textarea
+                ref={textareaRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={placeholder}
+                className="flex-1 min-h-[44px] max-h-32 resize-none border-0 bg-transparent p-0 text-base leading-6 focus:ring-0 focus-visible:ring-0"
+                disabled={isLoading}
+                rows={1}
+              />
+
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Press Enter to send, Shift+Enter for new line</span>
+
+                {isLoading ? (
+                  <Button
+                    type="button"
+                    onClick={handleStop}
+                    size="sm"
+                    variant="ghost"
+                    className="flex items-center gap-2 rounded-full text-muted-foreground hover:text-foreground"
+                  >
+                    <StopCircle className="h-4 w-4" />
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!message.trim() || isLoading}
+                    className="rounded-full px-4 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send message
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
-          
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            Press Enter to send, Shift+Enter for new line
-          </p>
         </form>
       </div>
     </div>

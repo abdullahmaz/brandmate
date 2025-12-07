@@ -17,23 +17,21 @@ export function ChatArea({ messages, isLoading }) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center h-full">
-        <div className="text-center space-y-4 max-w-md">
-          <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
-            <span className="text-2xl">🌿</span>
-          </div>
-          <h3 className="text-foreground font-medium">Welcome to your AI Assistant</h3>
-          <p className="text-muted-foreground">
-            Start a conversation by typing a message below. I'm here to help with any questions you might have.
-          </p>
-        </div>
+      <div className="flex-1 flex items-center justify-center h-full px-6">
+        <Spinner variant="ellipsis" size={24} className="text-primary" />
       </div>
     );
   }
 
   return (
-    <ScrollArea className="flex-1" ref={scrollAreaRef}>
-      <div className="max-w-4xl mx-auto">
+    <ScrollArea className="flex-1 h-full" ref={scrollAreaRef}>
+      <div className="mx-auto max-w-3xl py-6">
+        <div className="flex justify-center pb-2">
+          <span className="rounded-full bg-muted/70 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Today
+          </span>
+        </div>
+
         {messages.map((message) => (
           <ChatMessage
             key={message.id}
@@ -46,17 +44,17 @@ export function ChatArea({ messages, isLoading }) {
         ))}
         
         {isLoading && (
-          <div className="flex gap-4 p-6">
-            <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-accent-foreground text-sm">AI</span>
+          <div className="flex gap-4 px-4 py-5">
+            <div className="h-10 w-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-semibold">AI</span>
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-foreground">Assistant</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground text-sm">Thinking</span>
-                <Spinner variant="ellipsis" size={16} className="text-primary" />
+              <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  Assistant
+                  <span className="text-xs text-muted-foreground">is thinking</span>
+                  <Spinner variant="ellipsis" size={16} className="text-primary" />
+                </div>
               </div>
             </div>
           </div>

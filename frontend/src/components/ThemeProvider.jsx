@@ -10,18 +10,15 @@ export const useTheme = () => {
   return context;
 };
 
-export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState('light');
+const getInitialTheme = () => {
+  if (typeof window === 'undefined') return 'light';
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light' || saved === 'dark') return saved;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? 'dark' : 'light');
-    }
-  }, []);
+export const ThemeProvider = ({ children }) => {
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
     const root = window.document.documentElement;

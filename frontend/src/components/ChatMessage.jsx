@@ -5,74 +5,45 @@ import { Avatar, AvatarFallback } from './ui/avatar';
  */
 export function ChatMessage({ role, content, timestamp, image, tool }) {
   const isUser = role === 'user';
+  const label = isUser ? 'You' : 'Assistant';
 
-  if (isUser) {
-    // User messages - right aligned
-    return (
-      <div className="flex gap-4 p-6 justify-end">
-        <div className="flex flex-col items-end max-w-[75%]">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-foreground text-sm font-medium">
-              You
-            </span>
-            {timestamp && (
-              <span className="text-muted-foreground text-xs">
-                {timestamp}
-              </span>
-            )}
-          </div>
-          
-          <div className="bg-primary text-primary-foreground rounded-lg rounded-tr-sm p-4 break-words overflow-hidden w-fit max-w-full whitespace-pre-wrap">
-            {content}
-          </div>
-        </div>
-        
-        <Avatar className="h-8 w-8 flex-shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground">
-            U
-          </AvatarFallback>
-        </Avatar>
-      </div>
-    );
-  }
-
-  // Assistant messages - left aligned
   return (
-    <div className="flex gap-4 p-6">
-      <Avatar className="h-8 w-8 flex-shrink-0">
-        <AvatarFallback className="bg-accent text-accent-foreground">
-          AI
+    <div className="flex gap-4 px-4 py-5">
+      <Avatar className="h-10 w-10 flex-shrink-0">
+        <AvatarFallback className={isUser ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}>
+          {isUser ? 'U' : 'AI'}
         </AvatarFallback>
       </Avatar>
-      
-      <div className="flex flex-col max-w-[75%]">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-foreground text-sm font-medium">
-            Assistant
-          </span>
-          {timestamp && (
-            <span className="text-muted-foreground text-xs">
-              {timestamp}
-            </span>
-          )}
+
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">{label}</span>
+          {timestamp && <span className="text-muted-foreground/80">{timestamp}</span>}
         </div>
-        
-        <div className="bg-card border border-border text-foreground rounded-lg rounded-tl-sm p-4 break-words overflow-hidden w-fit max-w-full whitespace-pre-wrap">
-          {content}
-          
+
+        <div
+          className={`rounded-2xl border border-border/80 bg-card/90 px-4 py-3 shadow-sm backdrop-blur-sm ${
+            isUser ? 'shadow-primary/10' : 'shadow-black/5'
+          }`}
+        >
+          <div className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+            {content}
+          </div>
+
           {image && (
             <div className="mt-3">
-              <img 
-                src={image} 
-                alt="Generated content" 
-                className="rounded-md max-w-full max-h-[300px] object-contain"
+              <img
+                src={image}
+                alt="Generated content"
+                className="rounded-xl max-w-full max-h-[320px] object-contain"
               />
             </div>
           )}
-          
+
           {tool && tool !== 'conversation' && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              Tool used: {tool}
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-[11px] text-accent-foreground/80">
+              <span className="font-medium text-foreground">Tool</span>
+              <span className="uppercase tracking-wide text-muted-foreground">{tool}</span>
             </div>
           )}
         </div>

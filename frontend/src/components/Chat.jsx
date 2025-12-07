@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChatArea } from './ChatArea';
@@ -7,6 +7,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { useChat, useCreateChat } from '../hooks/useChat';
 import { api } from '../services/api';
 import { queryKeys } from '../types/api';
+import { Button } from './ui/button';
+import { PlusIcon, Search } from 'lucide-react';
 
 const Chat = () => {
   const { chatId } = useParams();
@@ -50,7 +52,7 @@ const Chat = () => {
   const createChatMutation = useCreateChat();
   
   // Convert API messages to UI format and merge with local state
-  const messages = React.useMemo(() => {
+  const messages = useMemo(() => {
     // Convert API messages to UI format
     const apiMessages = chatData?.messages ? chatData.messages.map(msg => ({
       id: msg.id,
@@ -172,39 +174,70 @@ const Chat = () => {
   };
 
   const isLoading = sendMessageMutation.isPending || createChatMutation.isPending || chatLoading;
+  const nowLabel = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date());
+  const headerTitle = chatData?.title || '';
+  const lastMessage = useMemo(
+    () => (chatData?.messages?.length ? chatData.messages[chatData.messages.length - 1] : null),
+    [chatData?.messages],
+  );
+  const headerSubtitle = lastMessage?.content || '';
 
   // Show welcome message when no chat is selected
-  if (!chatId) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md mx-auto px-6">
-            <h1 className="text-2xl font-bold text-foreground mb-4">Welcome to Brandmate</h1>
-            <p className="text-muted-foreground mb-6">
-              Start a new conversation by typing a message below.
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-transparent">
+      <div className="border-b border-border/70 bg-card/80 px-6 py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Today {nowLabel}
             </p>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground line-clamp-2">{headerTitle}</h1>
+              <p className="text-sm text-muted-foreground line-clamp-3">
+                {headerSubtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex w-full items-center gap-3 lg:w-auto">
+            <Button
+              onClick={() => navigate('/chat')}
+              className="rounded-full bg-primary px-4 text-primary-foreground shadow-lg shadow-primary/20"
+            >
+              <PlusIcon className="mr-2 h-4 w-4" />
+              New chat
+            </Button>
           </div>
         </div>
-        <ChatInput 
-          onSendMessage={handleSendMessage} 
-          isLoading={isLoading}
-          onStop={handleStop}
-          placeholder="Type your message to start a new conversation..."
-        />
       </div>
-    );
-  }
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <ChatArea messages={messages} isLoading={isLoading} />
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {!chatId ? (
+          <div className="flex h-full flex-col">
+            <div className="flex flex-1 items-center justify-center px-6">
+              <div className="text-center max-w-lg mx-auto space-y-3">
+                <h1 className="text-2xl font-bold text-foreground">Welcome to Brandmate</h1>
+                <p className="text-muted-foreground">
+                  Start a new conversation by typing a message below.
+                </p>
+              </div>
+            </div>
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              onStop={handleStop}
+              placeholder="Type your message to start a new conversation..."
+            />
+          </div>
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ChatArea messages={messages} isLoading={isLoading} />
+            </div>
+            <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} onStop={handleStop} />
+          </div>
+        )}
       </div>
-      <ChatInput 
-        onSendMessage={handleSendMessage} 
-        isLoading={isLoading}
-        onStop={handleStop}
-      />
     </div>
   );
 };
