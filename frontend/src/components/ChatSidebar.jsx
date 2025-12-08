@@ -116,7 +116,7 @@ export function ChatSidebar() {
             onClick={toggleTheme}
             aria-label="Toggle theme"
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === 'light' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <Button variant="ghost" size="icon" onClick={onToggle} className="hover:bg-sidebar-accent">
             <PanelLeftClose className="h-5 w-5" />
