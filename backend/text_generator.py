@@ -1,6 +1,12 @@
 """
 Text Generator using Qwen2-1.5B-Instruct
 Specializes in generating marketing content for Eastern clothing brands
+
+Performance Notes:
+- On CPU: Expect 10-20 seconds for short content (50-100 tokens), 20-40 seconds for longer content
+- On GPU: Expect 1-5 seconds for most content types
+- Optimizations: Content-type specific token limits, inference mode, KV cache, greedy decoding
+- For faster CPU inference, consider using a quantized model or smaller model variant
 """
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
@@ -18,7 +24,19 @@ class TextGenerator:
                 model_name,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 device_map="auto" if torch.cuda.is_available() else None,
+                low_cpu_mem_usage=True,  # More efficient memory usage
             )
+            
+            # Optimize model for inference
+            self.model.eval()  # Set to evaluation mode
+            
+            # Try to compile model for faster inference (PyTorch 2.0+)
+            try:
+                if hasattr(torch, 'compile') and torch.cuda.is_available():
+                    self.model = torch.compile(self.model, mode="reduce-overhead")
+                    print("Model compiled with torch.compile for faster inference")
+            except Exception as compile_error:
+                print(f"Could not compile model (this is okay): {compile_error}")
             
             print("Qwen2-1.5B-Instruct loaded successfully!")
             self.model_loaded = True
@@ -31,31 +49,36 @@ class TextGenerator:
     
     def _get_system_prompt(self) -> str:
         """System prompt for marketing content generation"""
-        return """You are a professional marketing assistant specializing in fashion, particularly Eastern and traditional clothing.
-Your role is to generate creative, persuasive, and culturally relevant marketing content. You can:
+        return """You are a marketing assistant for Eastern clothing brands. Generate creative, culturally relevant content. Be concise, persuasive, and professional."""
 
-1. Write ad copy, slogans, hooks, and call-to-actions for social media, email campaigns, landing pages, and advertisements.
-2. Generate social media posts, captions, and short-form content, adapted to the platform (Facebook, Instagram, TikTok, LinkedIn, etc.).
-3. Draft blog posts, articles, newsletters, and long-form content for content marketing or SEO purposes.
-4. Create marketing campaign ideas, including seasonal, festive, or event-based campaigns, with appropriate themes and messaging.
-5. Propose multi-channel strategies combining social media, email, blog, and paid ads.
-6. Help maintain brand voice and tone: consistent, culturally relevant, elegant, and modern.
-7. Suggest variations and A/B test ideas for ad copy, social media posts, and email sequences.
-8. Provide insights on audience targeting, engagement hooks, and creative messaging.
-9. Be aware of trends, cultural nuances, and festival seasons when generating marketing ideas.
-10. Always produce content that is engaging, persuasive, and suitable for the target audience.
-
-When responding:
-- Be creative, professional, and persuasive.
-- Respect cultural context and traditions of Eastern clothing.
-- Provide multiple variations when possible.
-- Keep responses concise but impactful."""
+    def _get_max_tokens_for_content_type(self, content_type: str) -> int:
+        """Get appropriate max_tokens based on content type for faster generation"""
+        token_limits = {
+            "caption": 80,
+            "slogan": 50,
+            "ad_copy": 60,
+            "meta_description": 40,
+            "whatsapp_broadcast": 80,
+            "description": 120,
+            "marketing_copy": 150,
+            "email": 200,
+            "launch_announcement": 120,
+            "sale_promo": 80,
+            "campaign_idea": 300,
+            "reel_idea": 200,
+            "story_content": 150,
+            "engagement_post": 100,
+            "influencer_brief": 250,
+            "category_description": 180,
+            "blog_post": 250,
+        }
+        return token_limits.get(content_type, 150)
 
     async def generate_content(
         self,
         topic: str,
         content_type: str = "marketing_copy",
-        max_tokens: int = 300,
+        max_tokens: Optional[int] = None,  # Auto-determine if None
         temperature: float = 0.7,
     ) -> str:
         """
@@ -64,7 +87,7 @@ When responding:
         Args:
             topic: The subject matter to write about
             content_type: Type of content (caption, description, marketing_copy, slogan, blog_post)
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (auto-determined if None)
             temperature: Creativity level (0.0-1.0)
         
         Returns:
@@ -72,6 +95,10 @@ When responding:
         """
         if not self.model_loaded:
             return f"Text generation service is unavailable. Topic: {topic}"
+        
+        # Auto-determine max_tokens if not provided
+        if max_tokens is None:
+            max_tokens = self._get_max_tokens_for_content_type(content_type)
         
         try:
             # Create user prompt based on content type
@@ -92,14 +119,21 @@ When responding:
             
             # Tokenize and generate
             inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
-            generated = self.model.generate(
-                **inputs,
-                max_new_tokens=max_tokens,
-                do_sample=True,
-                temperature=temperature,
-                top_p=0.9,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
+            
+            # Use inference mode for faster CPU/GPU inference
+            with torch.inference_mode():
+                generated = self.model.generate(
+                    **inputs,
+                    max_new_tokens=max_tokens,
+                    do_sample=temperature > 0.1,
+                    temperature=temperature if temperature > 0.1 else None,
+                    top_p=0.9 if temperature > 0.1 else None,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,  # Early stopping
+                    num_beams=1,  # Greedy decoding for speed
+                    use_cache=True,  # Enable KV cache for faster generation
+                    repetition_penalty=1.1  # Prevent repetition without slowing down
+                )
             
             # Extract only new tokens
             generated_ids = generated[0][len(inputs["input_ids"][0]):]
@@ -116,195 +150,43 @@ When responding:
         
         prompts = {
             # Core Marketing Content
-            "caption": f"""Write an engaging Instagram/social media caption for: {topic}
-
-Requirements:
-- Catchy opening hook
-- Relevant emojis (2-4)
-- Call-to-action
-- 2-3 relevant hashtags
-- Keep it concise (under 150 words)""",
-
-            "description": f"""Write a compelling product description for: {topic}
-
-Requirements:
-- Highlight key features and benefits
-- Use sensory and emotional language
-- Include fabric/material details if relevant
-- Make it appealing to the target audience
-- 100-150 words""",
-
-            "marketing_copy": f"""Create persuasive marketing copy for: {topic}
-
-Requirements:
-- Attention-grabbing headline
-- Engaging body copy
-- Strong call-to-action
-- Highlight unique selling points
-- Suitable for ads or promotional materials""",
-
-            "slogan": f"""Create catchy slogans/taglines for: {topic}
-
-Requirements:
-- Provide 5 different options
-- Keep each under 10 words
-- Make them memorable and brandable
-- Mix of elegant and modern tones""",
-
-            "ad_copy": f"""Write advertisement copy for: {topic}
-
-Requirements:
-- Primary headline (under 30 characters)
-- Secondary headline (under 50 characters)
-- Description (under 90 characters)
-- Call-to-action button text
-- Suitable for Facebook/Instagram ads""",
-
-            "email": f"""Write a marketing email for: {topic}
-
-Requirements:
-- Catchy subject line
-- Personalized greeting
-- Compelling body (150-200 words)
-- Clear call-to-action
-- Professional sign-off""",
+            "caption": f"Instagram caption for: {topic}. Include hook, emojis, CTA, hashtags.",
+            "description": f"Product description for: {topic}. Highlight features, benefits, materials. 100-150 words.",
+            "marketing_copy": f"Marketing copy for: {topic}. Headline, body, CTA, USPs.",
+            "slogan": f"5 catchy slogans for: {topic}. Under 10 words each. Elegant and modern.",
+            "ad_copy": f"Ad copy for: {topic}. Headline (30 chars), subheadline (50 chars), description (90 chars), CTA button.",
+            "email": f"Marketing email for: {topic}. Subject line, greeting, body (150-200 words), CTA, sign-off.",
 
             # Campaign & Strategy
-            "campaign_idea": f"""Create a complete marketing campaign idea for: {topic}
-
-Requirements:
-- Campaign name/theme
-- Target audience description
-- Key messaging points (3)
-- 3 social media post ideas
-- Email sequence outline (3 emails)
-- Promotional offer suggestion
-- 1-2 week timeline""",
-
-            "launch_announcement": f"""Write a collection launch announcement for: {topic}
-
-Requirements:
-- Exciting opening line
-- What's new in this collection
-- Key highlights (fabric, designs, colors)
-- Launch availability
-- Call-to-action
-- 100-150 words""",
-
-            "sale_promo": f"""Write a promotional/sale announcement for: {topic}
-
-Requirements:
-- Attention-grabbing headline
-- Discount/offer details
-- Urgency element (limited time/stock)
-- What's included
-- Clear call-to-action
-- Under 100 words""",
+            "campaign_idea": f"Marketing campaign for: {topic}. Theme, audience, 3 key messages, 3-5 social posts, email sequence, offers.",
+            "launch_announcement": f"Collection launch announcement for: {topic}. Opening, highlights, availability, CTA. 100-150 words.",
+            "sale_promo": f"Sale announcement for: {topic}. Headline, discount, urgency, CTA. Under 100 words.",
 
             # Social Media Specific
-            "reel_idea": f"""Create a social media reel/short video concept for: {topic}
-
-Requirements:
-- Video concept (15-30 seconds)
-- Scene-by-scene breakdown (4-6 scenes)
-- Suggested audio/music style
-- Text overlays for each scene
-- Hook in first 3 seconds
-- Call-to-action at end""",
-
-            "story_content": f"""Create Instagram/Facebook story content ideas for: {topic}
-
-Requirements:
-- 5 story slide ideas in sequence
-- Each slide: visual description + text overlay
-- Interactive elements (polls, questions, sliders)
-- Mix of product showcase and engagement
-- Swipe-up/link CTA on final slide""",
-
-            "engagement_post": f"""Create an engagement post for: {topic}
-
-Requirements:
-- Choose format: Poll OR Question OR This-or-That OR Quiz
-- Engaging question related to fashion/style
-- 2-4 answer options if applicable
-- Brief caption with context
-- Encourage comments/shares""",
+            "reel_idea": f"Reel concept for: {topic}. 15-30s, 4-6 scenes, audio style, text overlays, hook, CTA.",
+            "story_content": f"5 Instagram story slides for: {topic}. Visual + text per slide, interactive elements, final CTA.",
+            "engagement_post": f"Engagement post for: {topic}. Poll/Question/Quiz format, fashion-related question, options, caption.",
 
             # Business Communication
-            "whatsapp_broadcast": f"""Write a WhatsApp business broadcast message for: {topic}
-
-Requirements:
-- Friendly greeting
-- Brief product/offer highlight
-- Price range mention (use PKR)
-- How to order (reply/call/visit)
-- Under 100 words
-- Include 2-3 relevant emojis""",
-
-            "influencer_brief": f"""Create an influencer collaboration brief for: {topic}
-
-Requirements:
-- Campaign objective
-- Product to feature
-- Key talking points (3-4)
-- Content requirements (posts, stories, reels)
-- Hashtags to use
-- Do's and Don'ts
-- Deliverables timeline""",
+            "whatsapp_broadcast": f"WhatsApp broadcast for: {topic}. Greeting, highlight, PKR price, ordering info. Under 100 words, emojis.",
+            "influencer_brief": f"Influencer brief for: {topic}. Objective, product, 3-4 talking points, content requirements, hashtags, timeline.",
 
             # SEO & Web Content
-            "meta_description": f"""Write an SEO meta description for: {topic}
-
-Requirements:
-- 150-160 characters exactly
-- Include primary keyword naturally
-- Compelling and click-worthy
-- Mention key benefit
-- Include call-to-action""",
-
-            "category_description": f"""Write a website category page description for: {topic}
-
-Requirements:
-- SEO-optimized opening paragraph
-- Highlight collection features
-- Mention fabric types, styles available
-- Appeal to target audience
-- 150-200 words
-- Include natural keywords""",
+            "meta_description": f"SEO meta description for: {topic}. 150-160 chars, keyword, benefit, CTA.",
+            "category_description": f"Category page description for: {topic}. SEO intro, features, fabrics, styles. 150-200 words.",
 
             # Legacy support
-            "blog_post": f"""Write a blog post outline and introduction for: {topic}
-
-Requirements:
-- Compelling title
-- Introduction paragraph (100-150 words)
-- 5 main section headings
-- SEO-friendly approach
-- Engaging and informative tone"""
+            "blog_post": f"Blog post outline for: {topic}. Title, intro (100-150 words), 5 headings, SEO-friendly."
         }
         
-        return prompts.get(content_type, prompts["marketing_copy"])
+        return prompts.get(content_type, f"Marketing copy for: {topic}")
     
     async def generate_campaign_ideas(self, brand_info: str, season: str = "general") -> str:
         """Generate marketing campaign ideas for a brand"""
         if not self.model_loaded:
             return f"Text generation service is unavailable."
         
-        user_prompt = f"""Create a comprehensive marketing campaign for an Eastern clothing brand.
-
-Brand Information: {brand_info}
-Season/Occasion: {season}
-
-Please provide:
-1. Campaign theme and name
-2. Key messaging and tagline
-3. Target audience description
-4. Social media content ideas (3-5 posts)
-5. Email marketing sequence outline
-6. Promotional offers/hooks
-7. Visual content suggestions (for image generation)
-
-Make it culturally relevant, modern, and appealing to urban young adults."""
+        user_prompt = f"Marketing campaign for Eastern clothing brand. Brand: {brand_info}. Season: {season}. Include: theme, tagline, audience, 3-5 social posts, email sequence, offers, visual suggestions. Culturally relevant and modern."
 
         messages = [
             {"role": "system", "content": self._get_system_prompt()},
@@ -319,14 +201,19 @@ Make it culturally relevant, modern, and appealing to urban young adults."""
             )
             
             inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
-            generated = self.model.generate(
-                **inputs,
-                max_new_tokens=500,
-                do_sample=True,
-                temperature=0.8,
-                top_p=0.9,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
+            
+            with torch.inference_mode():
+                generated = self.model.generate(
+                    **inputs,
+                    max_new_tokens=500,
+                    do_sample=True,
+                    temperature=0.8,
+                    top_p=0.9,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    num_beams=1,
+                    use_cache=True,
+                    repetition_penalty=1.1
+                )
             
             generated_ids = generated[0][len(inputs["input_ids"][0]):]
             response = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
