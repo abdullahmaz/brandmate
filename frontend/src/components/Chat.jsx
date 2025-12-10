@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
@@ -15,15 +15,23 @@ const Chat = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [localMessages, setLocalMessages] = useState([]);
+  const abortControllerRef = useRef(null);
 
   // Only load chat data if we have a chatId and no local messages
   const { data: chatData, isLoading: chatLoading } = useChat(chatId);
 
   // Send message mutation with custom onSuccess handler
   const sendMessageMutation = useMutation({
-    mutationFn: ({ chatId, data }) => api.sendMessage(chatId, data),
+    mutationFn: ({ chatId, data }) => {
+      // Create a new AbortController for this request
+      abortControllerRef.current = new AbortController();
+      return api.sendMessage(chatId, data, abortControllerRef.current.signal);
+    },
     onSuccess: (response, variables) => {
       const { chatId } = variables;
+
+      // Clear AbortController
+      abortControllerRef.current = null;
 
       // Clear local messages since they'll be replaced by fresh API data
       setLocalMessages([]);
@@ -34,6 +42,14 @@ const Chat = () => {
       }
     },
     onError: (error) => {
+      // Clear AbortController
+      abortControllerRef.current = null;
+
+      // Don't show error message if request was aborted
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
+
       console.error("Failed to send message:", error);
 
       const errorMessage = {
@@ -185,6 +201,10 @@ const Chat = () => {
   };
 
   const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     sendMessageMutation.reset();
   };
 
@@ -197,13 +217,6 @@ const Chat = () => {
     minute: "2-digit",
   }).format(new Date());
   const headerTitle = chatData?.title || "";
-  const lastMessage = useMemo(
-    () =>
-      chatData?.messages?.length
-        ? chatData.messages[chatData.messages.length - 1]
-        : null,
-    [chatData?.messages]
-  );
 
   // Show welcome message when no chat is selected
   return (
