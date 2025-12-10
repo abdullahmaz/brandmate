@@ -26,29 +26,43 @@ from peft import (
 # ============== CONFIGURATION ==============
 
 MODEL_NAME = "Qwen/Qwen2-1.5B-Instruct"
-DATASET_PATH = Path("training_data/marketing_dataset.jsonl")
+DATASET_DIR = Path("training_data_v2")  # Directory with multiple JSONL files
 OUTPUT_DIR = Path("models/qwen2-marketing-lora")
 
 # Training hyperparameters
-BATCH_SIZE = 4
-GRADIENT_ACCUMULATION_STEPS = 4
-LEARNING_RATE = 2e-4
-NUM_EPOCHS = 3
+BATCH_SIZE = 2  # Smaller batch for better generalization
+GRADIENT_ACCUMULATION_STEPS = 8  # Effective batch = 16
+LEARNING_RATE = 5e-5  # Much lower LR to prevent overfitting
+NUM_EPOCHS = 2  # Fewer epochs for small dataset
 MAX_LENGTH = 512
+WARMUP_RATIO = 0.1
 
-# LoRA configuration
-LORA_R = 16
-LORA_ALPHA = 32
-LORA_DROPOUT = 0.05
+# LoRA configuration - more conservative
+LORA_R = 8  # Lower rank to prevent overfitting
+LORA_ALPHA = 16
+LORA_DROPOUT = 0.1  # Higher dropout for regularization
 
 # ============== HELPER FUNCTIONS ==============
 
-def load_jsonl_dataset(file_path: Path) -> Dataset:
-    """Load JSONL dataset"""
+def load_jsonl_dataset(dataset_dir: Path) -> Dataset:
+    """Load all JSONL files from a directory into a single dataset"""
     data = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            data.append(json.loads(line))
+    jsonl_files = list(dataset_dir.glob("*.jsonl"))
+    
+    if not jsonl_files:
+        raise FileNotFoundError(f"No JSONL files found in {dataset_dir}")
+    
+    print(f"Found {len(jsonl_files)} JSONL files:")
+    for file_path in jsonl_files:
+        file_count = 0
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    data.append(json.loads(line))
+                    file_count += 1
+        print(f"  - {file_path.name}: {file_count} examples")
+    
+    print(f"Total examples loaded: {len(data)}")
     return Dataset.from_list(data)
 
 
@@ -101,10 +115,15 @@ def main():
     print("Qwen2-1.5B Fine-tuning for Marketing Content")
     print("="*60)
     
-    # Check for dataset
-    if not DATASET_PATH.exists():
-        print(f"\n❌ Dataset not found: {DATASET_PATH}")
-        print("Please run generate_training_data.py first!")
+    # Check for dataset directory
+    if not DATASET_DIR.exists():
+        print(f"\n❌ Dataset directory not found: {DATASET_DIR}")
+        print("Please run generate_training_data_v2.py first!")
+        return
+    
+    jsonl_files = list(DATASET_DIR.glob("*.jsonl"))
+    if not jsonl_files:
+        print(f"\n❌ No JSONL files found in {DATASET_DIR}")
         return
     
     # Check GPU
@@ -120,10 +139,10 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
     
-    # Load dataset
-    print(f"\nLoading dataset: {DATASET_PATH}")
-    dataset = load_jsonl_dataset(DATASET_PATH)
-    print(f"Dataset size: {len(dataset)} examples")
+    # Load dataset from all JSONL files
+    print(f"\nLoading dataset from: {DATASET_DIR}")
+    dataset = load_jsonl_dataset(DATASET_DIR)
+    print(f"\nTotal dataset size: {len(dataset)} examples")
     
     # Split dataset
     dataset = dataset.train_test_split(test_size=0.1, seed=42)
@@ -181,7 +200,7 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
-    # Training arguments
+    # Training arguments - more conservative to prevent overfitting
     training_args = TrainingArguments(
         output_dir=str(OUTPUT_DIR),
         num_train_epochs=NUM_EPOCHS,
@@ -189,20 +208,23 @@ def main():
         per_device_eval_batch_size=BATCH_SIZE,
         gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
         learning_rate=LEARNING_RATE,
-        weight_decay=0.01,
-        warmup_ratio=0.1,
+        weight_decay=0.05,  # Higher weight decay for regularization
+        warmup_ratio=WARMUP_RATIO,
         lr_scheduler_type="cosine",
-        logging_steps=10,
+        logging_steps=5,  # Log more frequently
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=25,
         save_strategy="steps",
-        save_steps=100,
+        save_steps=50,
         save_total_limit=3,
         load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
         report_to="none",
         fp16=device == "cuda",
         optim="adamw_torch",
         gradient_checkpointing=True,
+        max_grad_norm=0.3,  # Gradient clipping for stability
     )
     
     # Data collator
@@ -241,25 +263,34 @@ def main():
     print("Testing fine-tuned model...")
     print("="*60)
     
+    # Set model to eval mode and disable gradient checkpointing for inference
+    model.eval()
+    model.config.use_cache = True
+    if hasattr(model, 'gradient_checkpointing_disable'):
+        model.gradient_checkpointing_disable()
+    
     test_prompt = """<|im_start|>system
 You are a professional marketing assistant specializing in Eastern and Pakistani fashion.
 Generate creative, culturally relevant marketing content for clothing brands.<|im_end|>
 <|im_start|>user
-Write an engaging Instagram caption for a luxury embroidered shawl for Eid.<|im_end|>
+Write an engaging Instagram caption for a luxury embroidered khaddar shawl from our winter collection.<|im_end|>
 <|im_start|>assistant
 """
-    
-    inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=150,
-        temperature=0.7,
-        do_sample=True,
-        top_p=0.9
-    )
+
+    with torch.no_grad():
+        inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=150,
+            temperature=0.7,
+            do_sample=True,
+            top_p=0.9,
+            pad_token_id=tokenizer.eos_token_id,
+            repetition_penalty=1.1,
+        )
     
     response = tokenizer.decode(outputs[0], skip_special_tokens=False)
-    print("\nTest prompt: Write an Instagram caption for a luxury embroidered shawl for Eid")
+    print("\nTest prompt: Write an Instagram caption for a luxury embroidered khaddar shawl from our winter collection")
     print("\nGenerated response:")
     print("-" * 40)
     # Extract just the assistant's response
@@ -268,7 +299,9 @@ Write an engaging Instagram caption for a luxury embroidered shawl for Eid.<|im_
         if "<|im_end|>" in response:
             response = response.split("<|im_end|>")[0]
     print(response.strip())
-
-
+    
+    print("\n" + "="*60)
+    print("Fine-tuning complete! Run evaluate_model.py for detailed evaluation.")
+    print("="*60)
 if __name__ == "__main__":
     main()

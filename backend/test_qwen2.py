@@ -1,97 +1,95 @@
 """
-Test script to verify Qwen2-1.5B-Instruct Text Generator works with the Backend
-Run this before starting the full backend server
+Interactive Test Script for Qwen2-1.5B-Instruct Text Generator
+Enter your prompt to generate marketing content
 """
 import asyncio
 import sys
 
-print("=" * 60)
-print("Testing Qwen2-1.5B-Instruct Text Generator")
-print("=" * 60)
+text_gen = None
 
-# Test 1: Import and initialize Text Generator
-print("\n[Test 1] Loading Text Generator with Qwen2...")
-try:
-    from text_generator import TextGenerator
-    text_gen = TextGenerator()
+def load_model():
+    global text_gen
+    print("=" * 60)
+    print("Qwen2-1.5B-Instruct Text Generator")
+    print("=" * 60)
     
-    if text_gen.model_loaded:
-        print("✓ Qwen2-1.5B-Instruct loaded successfully!")
-    else:
-        print("✗ Model failed to load")
-        sys.exit(1)
-except Exception as e:
-    print(f"✗ Error loading model: {e}")
-    sys.exit(1)
-
-# Test 2: Test caption generation
-print("\n[Test 2] Testing caption generation...")
-async def test_caption():
-    result = await text_gen.generate_content(
-        topic="Summer lawn collection with floral prints",
-        content_type="caption"
-    )
-    if result:
-        print(f"✓ Caption generated:")
-        print("-" * 40)
-        print(result[:500])
-        print("-" * 40)
-        return True
-    else:
-        print("✗ No response received")
+    print("\n⏳ Loading model...")
+    try:
+        from text_generator import TextGenerator
+        text_gen = TextGenerator()
+        
+        if text_gen.model_loaded:
+            print("✓ Model loaded successfully!\n")
+            return True
+        else:
+            print("✗ Model failed to load")
+            return False
+    except Exception as e:
+        print(f"✗ Error loading model: {e}")
         return False
 
-# Test 3: Test marketing copy generation
-print("\n[Test 3] Testing marketing copy generation...")
-async def test_marketing_copy():
+
+async def generate_from_prompt(prompt: str):
+    """Generate content from user prompt"""
+    if not text_gen or not text_gen.model_loaded:
+        print("✗ Model not loaded!")
+        return None
+    
+    print(f"\n⏳ Generating response...")
     result = await text_gen.generate_content(
-        topic="Winter shawl collection for women",
+        topic=prompt,
         content_type="marketing_copy"
     )
-    if result:
-        print(f"✓ Marketing copy generated:")
-        print("-" * 40)
-        print(result[:500])
-        print("-" * 40)
-        return True
-    else:
-        print("✗ No response received")
-        return False
+    return result
 
-# Test 4: Test slogan generation
-print("\n[Test 4] Testing slogan generation...")
-async def test_slogan():
-    result = await text_gen.generate_content(
-        topic="Eastern bridal wear collection",
-        content_type="slogan"
-    )
-    if result:
-        print(f"✓ Slogans generated:")
-        print("-" * 40)
-        print(result[:500])
-        print("-" * 40)
-        return True
-    else:
-        print("✗ No response received")
-        return False
 
-# Run all tests
-async def run_all_tests():
-    results = []
-    results.append(await test_caption())
-    results.append(await test_marketing_copy())
-    results.append(await test_slogan())
+def interactive_mode():
+    """Run interactive prompt mode"""
+    print("🎯 Enter your prompts below (type 'quit' to exit)\n")
     
-    print("\n" + "=" * 60)
-    print("Test Results Summary")
-    print("=" * 60)
-    print(f"Passed: {sum(results)}/{len(results)}")
-    
-    if all(results):
-        print("\n✓ All tests passed! Qwen2 Text Generator is working.")
-        print("You can now start the server with: python main.py")
-    else:
-        print("\n⚠ Some tests failed. Check the output above for details.")
+    while True:
+        print("-" * 60)
+        prompt = input("Your prompt: ").strip()
+        
+        if not prompt:
+            print("❌ Prompt cannot be empty!")
+            continue
+        
+        if prompt.lower() == 'quit':
+            print("\n👋 Goodbye!")
+            break
+        
+        # Generate content
+        result = asyncio.run(generate_from_prompt(prompt))
+        
+        if result:
+            print("\n" + "=" * 60)
+            print("✅ Generated Response:")
+            print("=" * 60)
+            print(result)
+            print("=" * 60)
+        else:
+            print("❌ Failed to generate content. Try again.")
+
 
 if __name__ == "__main__":
-    asyncio.run(run_all_tests())
+    # Load model first
+    if not load_model():
+        sys.exit(1)
+    
+    # Check for command line argument
+    if len(sys.argv) >= 2:
+        # Usage: python test_qwen2.py "your prompt here"
+        prompt = " ".join(sys.argv[1:])
+        result = asyncio.run(generate_from_prompt(prompt))
+        if result:
+            print("\n" + "=" * 60)
+            print("✅ Generated Response:")
+            print("=" * 60)
+            print(result)
+            print("=" * 60)
+        else:
+            print("❌ Failed to generate content.")
+    else:
+        # Interactive mode
+        interactive_mode()

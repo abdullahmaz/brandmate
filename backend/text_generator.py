@@ -1,5 +1,5 @@
 """
-Text Generator using Qwen2-1.5B-Instruct
+Text Generator using Fine-tuned Qwen2-1.5B-Instruct with LoRA
 Specializes in generating marketing content for Eastern clothing brands
 
 Performance Notes:
@@ -9,23 +9,50 @@ Performance Notes:
 - For faster CPU inference, consider using a quantized model or smaller model variant
 """
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 import torch
+import os
+from pathlib import Path
 from typing import Optional
 
 
 class TextGenerator:
     def __init__(self):
-        model_name = "Qwen/Qwen2-1.5B-Instruct"
-        print(f"Loading Qwen2-1.5B-Instruct model: {model_name}")
+        base_model_name = "Qwen/Qwen2-1.5B-Instruct"
+        
+        # Get the absolute path to the LoRA checkpoint
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        lora_path = os.path.join(script_dir, "..", "TextGeneration", "models", "qwen2-marketing-lora")
+        lora_path = os.path.normpath(lora_path)
+        
+        print(f"Loading Fine-tuned Qwen2-1.5B-Instruct model")
+        print(f"Base model: {base_model_name}")
+        print(f"LoRA adapter: {lora_path}")
         
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            # Load tokenizer
+            self.tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            
+            # Load base model
             self.model = AutoModelForCausalLM.from_pretrained(
-                model_name,
+                base_model_name,
                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                 device_map="auto" if torch.cuda.is_available() else None,
-                low_cpu_mem_usage=True,  # More efficient memory usage
+                low_cpu_mem_usage=True,
+                trust_remote_code=True
             )
+            
+            # Load and merge LoRA weights if they exist
+            if os.path.exists(lora_path):
+                print("Loading LoRA adapter weights...")
+                self.model = PeftModel.from_pretrained(self.model, lora_path)
+                self.model = self.model.merge_and_unload()
+                print("✓ Fine-tuned LoRA model loaded and merged successfully!")
+            else:
+                print(f"⚠️  LoRA weights not found at {lora_path}")
+                print("Using base Qwen2-1.5B-Instruct model without fine-tuning")
             
             # Optimize model for inference
             self.model.eval()  # Set to evaluation mode
@@ -38,18 +65,40 @@ class TextGenerator:
             except Exception as compile_error:
                 print(f"Could not compile model (this is okay): {compile_error}")
             
-            print("Qwen2-1.5B-Instruct loaded successfully!")
             self.model_loaded = True
             
         except Exception as e:
-            print(f"Error loading Qwen2-1.5B-Instruct: {e}")
+            print(f"Error loading model: {e}")
             self.model_loaded = False
             self.tokenizer = None
             self.model = None
     
     def _get_system_prompt(self) -> str:
         """System prompt for marketing content generation"""
-        return """You are a marketing assistant for Eastern clothing brands. Generate creative, culturally relevant content. Be concise, persuasive, and professional."""
+        return """You are a professional marketing content writer specializing in Pakistani and Eastern fashion brands. Your expertise includes:
+
+BRAND FOCUS:
+- Pakistani fashion brands selling lawn suits, khaddar, cotton, silk, and embroidered clothing
+- Seasonal collections: Summer (lawn, cotton) and Winter (khaddar, velvet, wool, shawls)
+- Target audience: Modern Pakistani women and men who appreciate traditional wear with contemporary styling
+
+CONTENT STYLE:
+- Use elegant, sophisticated language that resonates with Pakistani culture
+- Include relevant emojis (✨💫🌸👗) for social media content
+- Add trending hashtags like #PakistaniFashion #LawnCollection #EasternWear #DesiFashion
+- Reference cultural elements: Eid, weddings, festive seasons, mehndi, formal gatherings
+
+TONE:
+- Warm, inviting, and aspirational
+- Blend of traditional values with modern aesthetics
+- Emphasize quality, craftsmanship, and heritage
+- Create urgency for limited collections and sales
+
+OUTPUT REQUIREMENTS:
+- Keep responses focused and concise
+- Include call-to-actions where appropriate
+- Use Pakistani English spellings and expressions
+- Reference PKR for prices when mentioned"""
 
     def _get_max_tokens_for_content_type(self, content_type: str) -> int:
         """Get appropriate max_tokens based on content type for faster generation"""
