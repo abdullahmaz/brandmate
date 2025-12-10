@@ -1,7 +1,40 @@
 from typing import List, Optional
 from datetime import datetime
 from supabase_client import supabase_client
-from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType
+from database_models import (
+    ChatCreate,
+    ChatResponse,
+    MessageCreate,
+    MessageResponse,
+    ChatWithMessages,
+    MessageRole,
+    MessageType,
+)
+
+
+def _parse_db_timestamp(value: str) -> datetime:
+    """
+    Parse ISO timestamp strings coming back from Supabase in a way that is
+    robust across Python versions and minor format differences.
+
+    Examples of values we've seen:
+      - "2025-12-10T10:55:07.08128+00:00"
+      - "2025-12-10T10:55:07.081280Z"
+      - "2025-12-10T10:55:07.081280"
+    """
+    # Normalize trailing "Z" to "+00:00" (UTC) if present
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+
+    tz_separators = ["+", "-"]
+    for sep in tz_separators:
+        idx = value.find(sep, 10)
+        if idx != -1:
+            value = value[:idx]
+            break
+
+    return datetime.fromisoformat(value)
+
 
 class DatabaseService:
     def __init__(self):
@@ -30,8 +63,8 @@ class DatabaseService:
                     id=chat["id"],
                     title=chat["title"],
                     user_id=chat["user_id"],
-                    created_at=datetime.fromisoformat(chat["created_at"].replace('Z', '+00:00')),
-                    updated_at=datetime.fromisoformat(chat["updated_at"].replace('Z', '+00:00'))
+                    created_at=_parse_db_timestamp(chat["created_at"]),
+                    updated_at=_parse_db_timestamp(chat["updated_at"]),
                 )
             else:
                 raise Exception("Failed to create chat")
@@ -56,8 +89,8 @@ class DatabaseService:
                     id=chat["id"],
                     title=chat["title"],
                     user_id=chat["user_id"],
-                    created_at=datetime.fromisoformat(chat["created_at"].replace('Z', '+00:00')),
-                    updated_at=datetime.fromisoformat(chat["updated_at"].replace('Z', '+00:00'))
+                    created_at=_parse_db_timestamp(chat["created_at"]),
+                    updated_at=_parse_db_timestamp(chat["updated_at"]),
                 )
             return None
             
@@ -81,13 +114,15 @@ class DatabaseService:
             
             chats = []
             for chat in result.data:
-                chats.append(ChatResponse(
-                    id=chat["id"],
-                    title=chat["title"],
-                    user_id=chat["user_id"],
-                    created_at=datetime.fromisoformat(chat["created_at"].replace('Z', '+00:00')),
-                    updated_at=datetime.fromisoformat(chat["updated_at"].replace('Z', '+00:00'))
-                ))
+                chats.append(
+                    ChatResponse(
+                        id=chat["id"],
+                        title=chat["title"],
+                        user_id=chat["user_id"],
+                        created_at=_parse_db_timestamp(chat["created_at"]),
+                        updated_at=_parse_db_timestamp(chat["updated_at"]),
+                    )
+                )
             
             return chats
             
@@ -121,7 +156,7 @@ class DatabaseService:
                     message_type=MessageType(message["message_type"]),
                     s3_url=message["s3_url"],
                     metadata=message["metadata"],
-                    created_at=datetime.fromisoformat(message["created_at"].replace('Z', '+00:00'))
+                    created_at=_parse_db_timestamp(message["created_at"]),
                 )
             else:
                 raise Exception("Failed to create message")
@@ -138,20 +173,29 @@ class DatabaseService:
     async def get_messages(self, chat_id: str, limit: int = 100) -> List[MessageResponse]:
         """Get messages for a chat"""
         try:
-            result = self.client.table("messages").select("*").eq("chat_id", chat_id).order("created_at", desc=False).limit(limit).execute()
+            result = (
+                self.client.table("messages")
+                .select("*")
+                .eq("chat_id", chat_id)
+                .order("created_at", desc=False)
+                .limit(limit)
+                .execute()
+            )
             
             messages = []
             for message in result.data:
-                messages.append(MessageResponse(
-                    id=message["id"],
-                    chat_id=message["chat_id"],
-                    role=MessageRole(message["role"]),
-                    content=message["content"],
-                    message_type=MessageType(message["message_type"]),
-                    s3_url=message["s3_url"],
-                    metadata=message["metadata"],
-                    created_at=datetime.fromisoformat(message["created_at"].replace('Z', '+00:00'))
-                ))
+                messages.append(
+                    MessageResponse(
+                        id=message["id"],
+                        chat_id=message["chat_id"],
+                        role=MessageRole(message["role"]),
+                        content=message["content"],
+                        message_type=MessageType(message["message_type"]),
+                        s3_url=message["s3_url"],
+                        metadata=message["metadata"],
+                        created_at=_parse_db_timestamp(message["created_at"]),
+                    )
+                )
             
             return messages
             
