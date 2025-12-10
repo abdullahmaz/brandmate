@@ -20,7 +20,7 @@ class TextGenerator:
     def __init__(self):
         base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
         
-        print(f"Loading Qwen2.5-0.5B-Instruct model")
+        print(f"Loading Fine Tuned Qwen2.5-0.5B-Instruct model")
         print(f"Base model: {base_model_name}")
         
         try:
