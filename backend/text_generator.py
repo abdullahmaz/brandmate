@@ -131,7 +131,7 @@ Instructions:
                     eos_token_id=self.tokenizer.eos_token_id,
                     num_beams=1,
                     use_cache=True,
-                    repetition_penalty=1.1
+                    repetition_penalty=1.0
                 )
             
             generated_ids = generated[0][len(inputs["input_ids"][0]):]
