@@ -91,8 +91,7 @@ CREATIVE FREEDOM & INSTRUCTIONS:
 
     async def generate_content(
         self,
-        topic: str,
-        content_type: str = "marketing_copy",
+        prompt: str,
         temperature: float = 0.7,
     ) -> str:
         """
@@ -108,18 +107,13 @@ CREATIVE FREEDOM & INSTRUCTIONS:
             Generated marketing content
         """
         if not self.model_loaded:
-            return f"Text generation service is unavailable. Topic: {topic}"
+            return f"Text generation service is unavailable"
         
         try:
-            if content_type and content_type != "marketing_copy":
-                user_prompt = f"Create {content_type} content: {topic}"
-            else:
-                user_prompt = topic
-            
             # Build messages for chat template
             messages = [
                 {"role": "system", "content": self._get_system_prompt()},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": prompt}
             ]
             
             # Apply chat template
@@ -154,4 +148,4 @@ CREATIVE FREEDOM & INSTRUCTIONS:
             
         except Exception as e:
             print(f"Error generating text content: {e}")
-            return f"Error generating content for: {topic}"
+            return f"Error generating content for: {prompt}"

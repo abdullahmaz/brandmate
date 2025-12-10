@@ -156,22 +156,20 @@ async def process_message(chat_id: str, message: str, conversation_history: list
                     response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
                 
             elif tool_name == "text_generation":
-                topic = result["parameters"].get("topic", message)
-                content_type = result["parameters"].get("content_type", "marketing_copy")
+                prompt = result["parameters"].get("prompt", message)
                 
                 # Use Qwen2 text generator if available
                 if text_generator and text_generator.model_loaded:
                     try:
                         generated_text = await text_generator.generate_content(
-                            topic=topic,
-                            content_type=content_type
+                            prompt=prompt,
                         )
                         response_message = generated_text
                     except Exception as text_error:
                         print(f"Text generation error: {text_error}")
-                        response_message = f"I tried to generate {content_type} for '{topic}', but encountered an issue."
+                        response_message = f"I tried to generate content based on your request, but encountered an issue."
                 else:
-                    response_message = f"Text generation service is currently unavailable. Topic: {topic}"
+                    response_message = f"Text generation service is currently unavailable."
                 
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
@@ -449,22 +447,20 @@ async def chat(request: ChatRequest):
                     response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
                 
             elif tool_name == "text_generation":
-                topic = result["parameters"].get("topic", request.message)
-                content_type = result["parameters"].get("content_type", "marketing_copy")
+                prompt = result["parameters"].get("prompt", request.message)
                 
                 # Use Qwen2 text generator if available
                 if text_generator and text_generator.model_loaded:
                     try:
                         generated_text = await text_generator.generate_content(
-                            topic=topic,
-                            content_type=content_type
+                            prompt=prompt,
                         )
                         response_message = generated_text
                     except Exception as text_error:
                         print(f"Text generation error: {text_error}")
-                        response_message = f"I tried to generate {content_type} for '{topic}', but encountered an issue."
+                        response_message = f"I tried to generate content based on your request, but encountered an issue."
                 else:
-                    response_message = f"Text generation service is currently unavailable. Topic: {topic}"
+                    response_message = f"Text generation service is currently unavailable."
                 
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", request.message)

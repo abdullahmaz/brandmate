@@ -75,17 +75,12 @@ class LLMOrchestrator:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "content_type": {
+                        "prompt": {
                             "type": "string",
-                            "description": "Type of text content (caption, description, marketing_copy, slogan)",
-                            "default": "marketing_copy"
-                        },
-                        "topic": {
-                            "type": "string",
-                            "description": "Topic or product to write about"
+                            "description": "A comprehensive prompt describing what text content to generate, including the type (caption, description, marketing_copy, slogan, proposal, etc.), the subject matter, target audience, tone, length, and any specific requirements"
                         }
                     },
-                    "required": ["topic"]
+                    "required": ["prompt"]
                 }
             },
             {
@@ -253,7 +248,9 @@ class LLMOrchestrator:
 
         When users ask for marketing content like text/captions/copy/proposals, use:
         <text_generation>
-        {"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
+        {"parameters": {"prompt": "Create a comprehensive prompt that includes: (1) Content type (caption, description, marketing_copy, slogan, proposal, email, etc.), (2) Subject matter and context, (3) Target audience, (4) Tone and style requirements, (5) Length or format specifications, (6) Any specific requirements, keywords, or instructions from the user. Combine all user requirements into one detailed, actionable prompt."}}
+        
+        Example of a good prompt: "Create a marketing_copy for a new summer lawn collection targeting modern Pakistani women. The content should be elegant and sophisticated, include cultural references to Eid and festive seasons, use relevant emojis and hashtags like #PakistaniFashion #LawnCollection, emphasize quality and craftsmanship. The collection features floral prints, pastel colors, and lightweight cotton fabric suitable for hot weather."
 
         When users ask for videos, use:
         <video_generation>
