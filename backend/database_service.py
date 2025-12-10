@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
+import re
 from supabase_client import supabase_client
 from database_models import (
     ChatCreate,
@@ -21,19 +22,38 @@ def _parse_db_timestamp(value: str) -> datetime:
       - "2025-12-10T10:55:07.08128+00:00"
       - "2025-12-10T10:55:07.081280Z"
       - "2025-12-10T10:55:07.081280"
+    
+    Python < 3.13 requires exactly 6 digits for microseconds, so we normalize them.
     """
     # Normalize trailing "Z" to "+00:00" (UTC) if present
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
 
+    # Extract timezone if present
+    timezone = ""
     tz_separators = ["+", "-"]
     for sep in tz_separators:
         idx = value.find(sep, 10)
         if idx != -1:
+            timezone = value[idx:]
             value = value[:idx]
             break
 
-    return datetime.fromisoformat(value)
+    # Normalize microseconds to exactly 6 digits (pad or truncate)
+    # Pattern: matches .{1-9 digits} after seconds
+    pattern = r'\.(\d+)$'
+    match = re.search(pattern, value)
+    
+    if match:
+        microseconds = match.group(1)
+        # Pad to 6 digits or truncate to 6 digits
+        if len(microseconds) < 6:
+            microseconds = microseconds.ljust(6, '0')
+        elif len(microseconds) > 6:
+            microseconds = microseconds[:6]
+        value = value[:match.start()] + f'.{microseconds}'
+
+    return datetime.fromisoformat(value + timezone)
 
 
 class DatabaseService:
