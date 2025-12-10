@@ -146,7 +146,7 @@ class LLMOrchestrator:
             # Use the pipeline for generation with tool calling
             response = self.pipe(
                 full_prompt,
-                max_new_tokens=512,
+                max_new_tokens=2048,
                 temperature=0.7,
                 do_sample=True,
                 return_full_text=False,
@@ -243,25 +243,29 @@ class LLMOrchestrator:
         Create system content for conversation (without Llama formatting)
         """
 
-        return """You are Brandmate, an AI assistant for Eastern clothing brand marketing.
+        return """
+        
+        You are Brandmate, an AI assistant for Eastern clothing brand marketing.
 
-When users ask for images/posters/visuals, use:
-<image_generation>
-{"parameters": {"prompt": "description", "style": "eastern_clothing"}}
+        When users ask for images/posters/visuals, use:
+        <image_generation>
+        {"parameters": {"prompt": "description", "style": "eastern_clothing"}}
 
-When users ask for text/captions/copy/proposals, use:
-<text_generation>
-{"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
+        When users ask for marketing content like text/captions/copy/proposals, use:
+        <text_generation>
+        {"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
 
-When users ask for videos, use:
-<video_generation>
-{"parameters": {"description": "video description", "video_type": "promotional"}}
+        When users ask for videos, use:
+        <video_generation>
+        {"parameters": {"description": "video description", "video_type": "promotional"}}
 
-When users ask for websites, use:
-<website_generation>
-{"parameters": {"brand_info": "brand details", "page_type": "landing"}}
+        When users ask for websites, use:
+        <website_generation>
+        {"parameters": {"brand_info": "brand details", "page_type": "landing"}}
 
-For general conversation, just respond normally. Always call tools directly without explanations."""
+        For general conversation, just respond normally. Always call tools directly without explanations.
+
+        """
     
     
     def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
