@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback } from './ui/avatar';
+import ReactMarkdown from 'react-markdown';
 
 /**
  * Component for rendering a single chat message
@@ -26,9 +27,9 @@ export function ChatMessage({ role, content, timestamp, image, tool }) {
             isUser ? 'shadow-primary/10' : 'shadow-black/5'
           }`}
         >
-          <div className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-            {content}
-          </div>
+            <div className="prose prose-sm prose-invert max-w-none break-words leading-6">
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
 
           {image && (
             <div className="mt-3">

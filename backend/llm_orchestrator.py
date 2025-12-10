@@ -249,7 +249,7 @@ When users ask for images/posters/visuals, use:
 <image_generation>
 {"parameters": {"prompt": "description", "style": "eastern_clothing"}}
 
-When users ask for text/captions/copy, use:
+When users ask for text/captions/copy/proposals, use:
 <text_generation>
 {"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
 

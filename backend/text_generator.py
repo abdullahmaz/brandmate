@@ -18,14 +18,14 @@ from typing import Optional
 
 class TextGenerator:
     def __init__(self):
-        base_model_name = "Qwen/Qwen2-1.5B-Instruct"
+        base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
         
         # Get the absolute path to the LoRA checkpoint
         script_dir = os.path.dirname(os.path.abspath(__file__))
         lora_path = os.path.join(script_dir, "..", "TextGeneration", "models", "qwen2-marketing-lora")
         lora_path = os.path.normpath(lora_path)
         
-        print(f"Loading Fine-tuned Qwen2-1.5B-Instruct model")
+        print(f"Loading Qwen2.5-0.5B-Instruct model")
         print(f"Base model: {base_model_name}")
         print(f"LoRA adapter: {lora_path}")
         
@@ -75,68 +75,47 @@ class TextGenerator:
     
     def _get_system_prompt(self) -> str:
         """System prompt for marketing content generation"""
-        return """You are a professional marketing content writer specializing in Pakistani and Eastern fashion brands. Your expertise includes:
+        return """You are a senior marketing copywriter and strategist for Pakistani and Eastern fashion brands.
+
+Your job is to take the user's brief and turn it into clear, compelling, and well‑structured content. You can write short social captions, long‑form proposals, pitch decks (in text form), emails, website copy, campaign ideas, and more.
 
 BRAND FOCUS:
-- Pakistani fashion brands selling lawn suits, khaddar, cotton, silk, and embroidered clothing
+- Pakistani and Eastern fashion brands selling lawn suits, khaddar, cotton, silk, velvet, and embroidered clothing
 - Seasonal collections: Summer (lawn, cotton) and Winter (khaddar, velvet, wool, shawls)
 - Target audience: Modern Pakistani women and men who appreciate traditional wear with contemporary styling
 
 CONTENT STYLE:
 - Use elegant, sophisticated language that resonates with Pakistani culture
-- Include relevant emojis (✨💫🌸👗) for social media content
-- Add trending hashtags like #PakistaniFashion #LawnCollection #EasternWear #DesiFashion
-- Reference cultural elements: Eid, weddings, festive seasons, mehndi, formal gatherings
+- When suitable (e.g. social media), include relevant emojis (✨💫🌸👗) and trending hashtags like #PakistaniFashion #LawnCollection #EasternWear #DesiFashion
+- For formal documents (e.g. stakeholder proposals, internal strategy docs), avoid emojis and keep the tone professional and polished
+- Reference cultural elements where relevant: Eid, weddings, festive seasons, mehndi, formal gatherings
 
-TONE:
-- Warm, inviting, and aspirational
-- Blend of traditional values with modern aesthetics
-- Emphasize quality, craftsmanship, and heritage
-- Create urgency for limited collections and sales
+TONE & STRUCTURE:
+- Warm, inviting, and aspirational while still being clear and business‑minded
+- Blend traditional values with modern aesthetics and commercial thinking
+- Emphasize quality, craftsmanship, heritage, and business impact (ROI, growth, brand equity) when appropriate
+- For long‑form pieces (like proposals or strategies), organise content into logical sections with headings, subheadings, bullet points, and clear flow (introduction → context/insight → strategy/idea → details → conclusion/CTA)
 
-OUTPUT REQUIREMENTS:
-- Keep responses focused and concise
-- Include call-to-actions where appropriate
-- Use Pakistani English spellings and expressions
-- Reference PKR for prices when mentioned"""
-
-    def _get_max_tokens_for_content_type(self, content_type: str) -> int:
-        """Get appropriate max_tokens based on content type for faster generation"""
-        token_limits = {
-            "caption": 80,
-            "slogan": 50,
-            "ad_copy": 60,
-            "meta_description": 40,
-            "whatsapp_broadcast": 80,
-            "description": 120,
-            "marketing_copy": 150,
-            "email": 200,
-            "launch_announcement": 120,
-            "sale_promo": 80,
-            "campaign_idea": 300,
-            "reel_idea": 200,
-            "story_content": 150,
-            "engagement_post": 100,
-            "influencer_brief": 250,
-            "category_description": 180,
-            "blog_post": 250,
-        }
-        return token_limits.get(content_type, 150)
+CREATIVE FREEDOM & INSTRUCTIONS:
+- Follow the user's prompt and explicit requirements closely; treat their message as the source of truth
+- Let the user's brief guide the format, level of detail, and length; do not cut content short unless the brief asks for it
+- Feel free to add structure, angles, and details that make the content more persuasive and useful for Pakistani fashion brands
+- Use Pakistani English spellings and expressions, and reference PKR for prices when mentioned
+- Avoid repeating the same ideas or phrases; keep the writing tight, specific, and reader‑friendly."""
 
     async def generate_content(
         self,
         topic: str,
         content_type: str = "marketing_copy",
-        max_tokens: Optional[int] = None,  # Auto-determine if None
         temperature: float = 0.7,
     ) -> str:
         """
         Generate marketing content based on topic and content type
         
         Args:
-            topic: The subject matter to write about
-            content_type: Type of content (caption, description, marketing_copy, slogan, blog_post)
-            max_tokens: Maximum tokens to generate (auto-determined if None)
+            topic: The subject matter, detailed prompt, or creative brief to write about
+                   Can be a simple topic or a detailed creative prompt with specific requirements
+            content_type: Type of content (optional, for context only - topic can include full instructions)
             temperature: Creativity level (0.0-1.0)
         
         Returns:
@@ -145,13 +124,11 @@ OUTPUT REQUIREMENTS:
         if not self.model_loaded:
             return f"Text generation service is unavailable. Topic: {topic}"
         
-        # Auto-determine max_tokens if not provided
-        if max_tokens is None:
-            max_tokens = self._get_max_tokens_for_content_type(content_type)
-        
         try:
-            # Create user prompt based on content type
-            user_prompt = self._create_user_prompt(topic, content_type)
+            if content_type and content_type != "marketing_copy":
+                user_prompt = f"Create {content_type} content: {topic}"
+            else:
+                user_prompt = topic
             
             # Build messages for chat template
             messages = [
@@ -173,7 +150,7 @@ OUTPUT REQUIREMENTS:
             with torch.inference_mode():
                 generated = self.model.generate(
                     **inputs,
-                    max_new_tokens=max_tokens,
+                    max_new_tokens=4096,  # Allow for long-form content like proposals, detailed descriptions
                     do_sample=temperature > 0.1,
                     temperature=temperature if temperature > 0.1 else None,
                     top_p=0.9 if temperature > 0.1 else None,
@@ -194,41 +171,6 @@ OUTPUT REQUIREMENTS:
             print(f"Error generating text content: {e}")
             return f"Error generating content for: {topic}"
     
-    def _create_user_prompt(self, topic: str, content_type: str) -> str:
-        """Create appropriate user prompt based on content type"""
-        
-        prompts = {
-            # Core Marketing Content
-            "caption": f"Instagram caption for: {topic}. Include hook, emojis, CTA, hashtags.",
-            "description": f"Product description for: {topic}. Highlight features, benefits, materials. 100-150 words.",
-            "marketing_copy": f"Marketing copy for: {topic}. Headline, body, CTA, USPs.",
-            "slogan": f"5 catchy slogans for: {topic}. Under 10 words each. Elegant and modern.",
-            "ad_copy": f"Ad copy for: {topic}. Headline (30 chars), subheadline (50 chars), description (90 chars), CTA button.",
-            "email": f"Marketing email for: {topic}. Subject line, greeting, body (150-200 words), CTA, sign-off.",
-
-            # Campaign & Strategy
-            "campaign_idea": f"Marketing campaign for: {topic}. Theme, audience, 3 key messages, 3-5 social posts, email sequence, offers.",
-            "launch_announcement": f"Collection launch announcement for: {topic}. Opening, highlights, availability, CTA. 100-150 words.",
-            "sale_promo": f"Sale announcement for: {topic}. Headline, discount, urgency, CTA. Under 100 words.",
-
-            # Social Media Specific
-            "reel_idea": f"Reel concept for: {topic}. 15-30s, 4-6 scenes, audio style, text overlays, hook, CTA.",
-            "story_content": f"5 Instagram story slides for: {topic}. Visual + text per slide, interactive elements, final CTA.",
-            "engagement_post": f"Engagement post for: {topic}. Poll/Question/Quiz format, fashion-related question, options, caption.",
-
-            # Business Communication
-            "whatsapp_broadcast": f"WhatsApp broadcast for: {topic}. Greeting, highlight, PKR price, ordering info. Under 100 words, emojis.",
-            "influencer_brief": f"Influencer brief for: {topic}. Objective, product, 3-4 talking points, content requirements, hashtags, timeline.",
-
-            # SEO & Web Content
-            "meta_description": f"SEO meta description for: {topic}. 150-160 chars, keyword, benefit, CTA.",
-            "category_description": f"Category page description for: {topic}. SEO intro, features, fabrics, styles. 150-200 words.",
-
-            # Legacy support
-            "blog_post": f"Blog post outline for: {topic}. Title, intro (100-150 words), 5 headings, SEO-friendly."
-        }
-        
-        return prompts.get(content_type, f"Marketing copy for: {topic}")
     
     async def generate_campaign_ideas(self, brand_info: str, season: str = "general") -> str:
         """Generate marketing campaign ideas for a brand"""
@@ -254,7 +196,7 @@ OUTPUT REQUIREMENTS:
             with torch.inference_mode():
                 generated = self.model.generate(
                     **inputs,
-                    max_new_tokens=500,
+                    max_new_tokens=4096,
                     do_sample=True,
                     temperature=0.8,
                     top_p=0.9,
