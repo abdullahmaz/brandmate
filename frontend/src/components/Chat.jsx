@@ -204,7 +204,6 @@ const Chat = () => {
         : null,
     [chatData?.messages]
   );
-  const headerSubtitle = lastMessage?.content || "";
 
   // Show welcome message when no chat is selected
   return (
@@ -219,9 +218,6 @@ const Chat = () => {
               <h1 className="text-xl font-semibold text-foreground line-clamp-2">
                 {headerTitle}
               </h1>
-              <p className="text-sm text-muted-foreground line-clamp-3">
-                {headerSubtitle}
-              </p>
             </div>
           </div>
 

@@ -27,7 +27,7 @@ export function ChatMessage({ role, content, timestamp, image, tool }) {
             isUser ? 'shadow-primary/10' : 'shadow-black/5'
           }`}
         >
-            <div className="prose prose-sm prose-invert max-w-none break-words leading-6">
+            <div className="prose prose-sm prose-invert max-w-none break-words leading-6 text-foreground">
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>
 
