@@ -248,7 +248,7 @@ class LLMOrchestrator:
 
         When users ask for marketing content like text/captions/copy/proposals, use:
         <text_generation>
-        {"parameters": {"prompt": "Create a comprehensive prompt that includes: (1) Content type (caption, description, marketing_copy, slogan, proposal, email, etc.), (2) Subject matter and context, (3) Target audience, (4) Tone and style requirements, (5) Length or format specifications, (6) Any specific requirements, keywords, or instructions from the user. Combine all user requirements into one detailed, actionable prompt."}}
+        {"parameters": {"prompt": "Prompt that describes the content to generate based on the user's request"}}
         
         Example of a good prompt: "Create a marketing_copy for a new summer lawn collection targeting modern Pakistani women. The content should be elegant and sophisticated, include cultural references to Eid and festive seasons, use relevant emojis and hashtags like #PakistaniFashion #LawnCollection, emphasize quality and craftsmanship. The collection features floral prints, pastel colors, and lightweight cotton fabric suitable for hot weather."
 
