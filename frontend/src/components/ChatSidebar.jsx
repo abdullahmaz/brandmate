@@ -187,10 +187,11 @@ export function ChatSidebar() {
                             <h3 className="line-clamp-2 text-sm font-semibold text-sidebar-foreground">
                               {conversation.title}
                             </h3>
-                            <span className="text-[11px] text-sidebar-foreground/60">
+                            
+                          </div>
+                          <span className="text-[11px] text-sidebar-foreground/60">
                               {formatDistanceToNow(new Date(conversation.updated_at), { addSuffix: true })}
                             </span>
-                          </div>
                           <div className="flex items-center justify-end pt-1">
                             <button
                               onClick={(e) => handleDeleteClick(e, conversation.id)}

@@ -44,7 +44,7 @@ export const api = {
   deleteChat: (chatId) => apiClient.delete(`/api/chats/${chatId}`),
   
   // Message endpoints
-  sendMessage: (chatId, data) => apiClient.post(`/api/chats/${chatId}/messages`, data),
+  sendMessage: (chatId, data, signal) => apiClient.post(`/api/chats/${chatId}/messages`, data, { signal }),
   getMessages: (chatId, params = {}) => apiClient.get(`/api/chats/${chatId}/messages`, { params }),
   
   // Health check

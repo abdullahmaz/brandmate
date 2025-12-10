@@ -136,57 +136,12 @@ CREATIVE FREEDOM & INSTRUCTIONS:
             with torch.inference_mode():
                 generated = self.model.generate(
                     **inputs,
-                    max_new_tokens=4096,  # Allow for long-form content like proposals, detailed descriptions
+                    max_new_tokens=4096,
                     do_sample=temperature > 0.1,
                     temperature=temperature if temperature > 0.1 else None,
                     top_p=0.9 if temperature > 0.1 else None,
                     pad_token_id=self.tokenizer.eos_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id,  # Early stopping
-                    num_beams=1,  # Greedy decoding for speed
-                    use_cache=True,  # Enable KV cache for faster generation
-                    repetition_penalty=1.1  # Prevent repetition without slowing down
-                )
-            
-            # Extract only new tokens
-            generated_ids = generated[0][len(inputs["input_ids"][0]):]
-            response = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-            
-            return response.strip()
-            
-        except Exception as e:
-            print(f"Error generating text content: {e}")
-            return f"Error generating content for: {topic}"
-    
-    
-    async def generate_campaign_ideas(self, brand_info: str, season: str = "general") -> str:
-        """Generate marketing campaign ideas for a brand"""
-        if not self.model_loaded:
-            return f"Text generation service is unavailable."
-        
-        user_prompt = f"Marketing campaign for Eastern clothing brand. Brand: {brand_info}. Season: {season}. Include: theme, tagline, audience, 3-5 social posts, email sequence, offers, visual suggestions. Culturally relevant and modern."
-
-        messages = [
-            {"role": "system", "content": self._get_system_prompt()},
-            {"role": "user", "content": user_prompt}
-        ]
-        
-        try:
-            text = self.tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-            
-            inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
-            
-            with torch.inference_mode():
-                generated = self.model.generate(
-                    **inputs,
-                    max_new_tokens=4096,
-                    do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
-                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
                     num_beams=1,
                     use_cache=True,
                     repetition_penalty=1.1
@@ -198,5 +153,5 @@ CREATIVE FREEDOM & INSTRUCTIONS:
             return response.strip()
             
         except Exception as e:
-            print(f"Error generating campaign ideas: {e}")
-            return f"Error generating campaign for: {brand_info}"
+            print(f"Error generating text content: {e}")
+            return f"Error generating content for: {topic}"

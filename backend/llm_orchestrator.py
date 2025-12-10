@@ -146,7 +146,7 @@ class LLMOrchestrator:
             # Use the pipeline for generation with tool calling
             response = self.pipe(
                 full_prompt,
-                max_new_tokens=512,
+                max_new_tokens=2048,
                 temperature=0.7,
                 do_sample=True,
                 return_full_text=False,
@@ -270,21 +270,28 @@ Call:
 {"parameters": {"prompt": "description", "style": "eastern_clothing"}}
 
 2) TEXT GENERATION  
-Use this when the user asks for **any marketing-related written content**, including but not limited to:
-- Social media captions, post copy, ad copy.
-- Headlines, taglines, slogans, hooks.
-- Product descriptions, collection descriptions.
-- SEO content such as category page descriptions, collection page intros, SEO landing page copy, meta descriptions, and similar on-site text.
-- Marketing emails, newsletters, welcome sequences, abandoned cart emails, promotional emails.
-- SMS/WhatsApp messages, push notifications.
-- Campaign concepts, campaign names, content calendars.
-- Scripts for video ads or reels (the text part).
-- Proposals, pitches, briefs, or other marketing documents.
+**MANDATORY** - Use this tool when the user asks you to CREATE, WRITE, or GENERATE any written marketing content, including but not limited to:
+- Social media captions (Instagram, Facebook, Twitter, TikTok)
+- Email content and newsletters
+- Product descriptions
+- Marketing copy and ad text
+- Blog posts and articles
+- Slogans and taglines
+- Website copy and landing page text
+- SMS marketing messages
+- Press releases
+- Brand descriptions and bios
+- Collection descriptions
+- Campaign messaging
+- Proposals, pitches, briefs, marketing documents, marketing campagins.
+- Any other written marketing material
+
+**IMPORTANT**: If the user asks you to "write", "create", "generate", "make", "draft", "compose", or "come up with" any text content, you MUST call this tool. Do NOT write the content yourself.
 
 Call:
 
 <text_generation>
-{"parameters": {"topic": "subject", "content_type": "marketing_copy"}}
+{"parameters": {"topic": "subject or detailed description of what to write about (If provided, should have details about brand as well)", "content_type": "caption|email|product_description|marketing_copy|slogan|blog_post|etc"}}
 
 3) VIDEO GENERATION  
 Use this when the user asks for **video-related assets** such as: video concepts, promotional videos, ad videos, reels, TikTok content, lookbook videos, product showcase videos, etc.
@@ -302,16 +309,25 @@ Call:
 <website_generation>
 {"parameters": {"brand_info": "key details about the brand, products, audience, and positioning", "page_type": "short description of the page type, e.g. 'landing', 'homepage', 'product_page', 'collection_page'"}}
 
-GENERAL CONVERSATION
-- For casual chat, strategy discussions, feedback on existing content, or high-level marketing advice that does not require generating a new asset, you may respond normally without calling a tool.
-- If the user wants both ideas/strategy AND new content (e.g., “advise me and also write the email”), you may briefly advise in natural language and then call the appropriate tool to generate the concrete asset.
+GENERAL CONVERSATION (NO TOOL CALLS)
+Only respond conversationally (without tools) when the user is:
+- Requesting feedback on existing content they've shared
+- Having a casual conversation
+- Asking clarifying questions about your capabilities
+
+**REMEMBER**: If the user asks you to CREATE, WRITE, or GENERATE anything, you MUST use a tool. Do not generate content in your conversational response.
 
 TOOL CALL FORMAT
 - When you decide to use a tool, **respond with the tool call only**, using exactly the tag and JSON format shown above.
 - Do **not** add any extra natural language before or after the tool call.
-- Prefer a single, best tool call per user message. If the user clearly needs multiple different assets (e.g., an image and a caption), you may call the appropriate tools one after another, each as a separate tool call with no additional text.
 
-If you are uncertain which tool to use, ask one short clarifying question. Otherwise, choose the single most appropriate tool based on the user’s primary requested output.
+**CRITICAL**: The JSON must be complete and valid. Always close all braces and brackets. Example:
+  <text_generation>
+  {"parameters": {"topic": "complete topic description", "content_type": "proposal"}}
+  
+  Notice: The JSON has closing braces for both the "parameters" object and the outer object.
+
+If you are uncertain which tool to use, ask one short clarifying question. Otherwise, choose the single most appropriate tool based on the user's primary requested output.
 
 """
     
