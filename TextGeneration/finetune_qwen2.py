@@ -1,5 +1,5 @@
 """
-Fine-tune Qwen2-1.5B-Instruct on Marketing Content Dataset
+Fine-tune Qwen2.5-0.5B-Instruct on Marketing Content Dataset
 Uses LoRA for efficient fine-tuning with limited GPU memory
 """
 
@@ -25,7 +25,7 @@ from peft import (
 
 # ============== CONFIGURATION ==============
 
-MODEL_NAME = "Qwen/Qwen2-1.5B-Instruct"
+MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
 DATASET_DIR = Path("training_data_v2")  # Directory with multiple JSONL files
 OUTPUT_DIR = Path("models/qwen2-marketing-lora")
 
@@ -112,7 +112,7 @@ def tokenize_function(examples, tokenizer, max_length):
 
 def main():
     print("="*60)
-    print("Qwen2-1.5B Fine-tuning for Marketing Content")
+    print("Qwen2.5-0.5B Fine-tuning for Marketing Content")
     print("="*60)
     
     # Check for dataset directory

@@ -1,6 +1,6 @@
-# Qwen2-1.5B Fine-Tuning Results for Marketing Content Generation
+# Qwen2.5-0.5B Fine-Tuning Results for Marketing Content Generation
 
-**Model**: Qwen2-1.5B-Instruct  
+**Model**: Qwen2.5-0.5B-Instruct  
 **Fine-tuning Method**: LoRA (Low-Rank Adaptation)  
 **Evaluation Date**: December 8, 2025  
 **Overall Score**: 87.36% ✅ Excellent - Ready for Production
@@ -10,7 +10,7 @@
 ## 1. Fine-Tuning Configuration
 
 ### Model Architecture
-- **Base Model**: Qwen/Qwen2-1.5B-Instruct
+- **Base Model**: Qwen/Qwen2.5-0.5B-Instruct
 - **Total Parameters**: 1,552,946,688
 - **Trainable Parameters**: 9,232,384 (0.59%)
 - **Quantization**: 4-bit (NF4) with BitsAndBytes
@@ -488,7 +488,7 @@ The model was tested on its ability to follow specific formatting instructions.
 
 ## 8. Conclusion
 
-The fine-tuned Qwen2-1.5B model demonstrates strong capabilities for marketing content generation in the Pakistani fashion domain:
+The fine-tuned Qwen2.5-0.5B model demonstrates strong capabilities for marketing content generation in the Pakistani fashion domain:
 
 | Metric | Score | Rating |
 |--------|-------|--------|

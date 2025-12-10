@@ -17,7 +17,7 @@ from peft import PeftModel
 
 # ============== CONFIGURATION ==============
 
-BASE_MODEL = "Qwen/Qwen2-1.5B-Instruct"
+BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 LORA_MODEL_PATH = Path("models/qwen2-marketing-lora")
 RESULTS_DIR = Path("evaluation_results")
 

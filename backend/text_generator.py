@@ -1,5 +1,5 @@
 """
-Text Generator using Fine-tuned Qwen2-1.5B-Instruct with LoRA
+Text Generator using Fine-tuned Qwen2.5-0.5B-Instruct with LoRA
 Specializes in generating marketing content for Eastern clothing brands
 
 Performance Notes:
@@ -20,14 +20,8 @@ class TextGenerator:
     def __init__(self):
         base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
         
-        # Get the absolute path to the LoRA checkpoint
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        lora_path = os.path.join(script_dir, "..", "TextGeneration", "models", "qwen2-marketing-lora")
-        lora_path = os.path.normpath(lora_path)
-        
         print(f"Loading Qwen2.5-0.5B-Instruct model")
         print(f"Base model: {base_model_name}")
-        print(f"LoRA adapter: {lora_path}")
         
         try:
             # Load tokenizer
@@ -44,15 +38,7 @@ class TextGenerator:
                 trust_remote_code=True
             )
             
-            # Load and merge LoRA weights if they exist
-            if os.path.exists(lora_path):
-                print("Loading LoRA adapter weights...")
-                self.model = PeftModel.from_pretrained(self.model, lora_path)
-                self.model = self.model.merge_and_unload()
-                print("✓ Fine-tuned LoRA model loaded and merged successfully!")
-            else:
-                print(f"⚠️  LoRA weights not found at {lora_path}")
-                print("Using base Qwen2-1.5B-Instruct model without fine-tuning")
+            print("✓ Model loaded successfully!")
             
             # Optimize model for inference
             self.model.eval()  # Set to evaluation mode

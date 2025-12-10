@@ -1,5 +1,5 @@
 """
-Interactive Test Script for Qwen2-1.5B-Instruct Text Generator
+Interactive Test Script for Qwen2.5-0.5B-Instruct Text Generator
 Enter your prompt to generate marketing content
 """
 import asyncio
@@ -10,7 +10,7 @@ text_gen = None
 def load_model():
     global text_gen
     print("=" * 60)
-    print("Qwen2-1.5B-Instruct Text Generator")
+    print("Qwen2.5-0.5B-Instruct Text Generator")
     print("=" * 60)
     
     print("\n⏳ Loading model...")

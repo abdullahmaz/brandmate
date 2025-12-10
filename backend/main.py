@@ -60,7 +60,7 @@ def initialize_components_background():
 
     # Try to initialize text generator (Qwen2)
     try:
-        print("Loading Text Generator (Qwen2-1.5B)...")
+        print("Loading Text Generator (Qwen2.5-0.5B)...")
         text_generator = TextGenerator()
         print("Text Generator initialized successfully!")
     except Exception as e:

@@ -40,7 +40,7 @@ def load_model():
     print("Loading Fine-tuned Qwen2 Model")
     print("=" * 60)
     
-    base_model_name = "Qwen/Qwen2-1.5B-Instruct"
+    base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
     # Get the absolute path to the LoRA checkpoint
     script_dir = os.path.dirname(os.path.abspath(__file__))
     lora_path = os.path.join(script_dir, "..", "TextGeneration", "models", "qwen2-marketing-lora")
