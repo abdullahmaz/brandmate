@@ -26,55 +26,66 @@ app.add_middleware(
 )
 
 # Global variables for components
+# NOTE: Only orchestrator is initialized at startup (on CPU)
+# Image and text generators use lazy loading (load to VRAM when called, unload after use)
 llm_orchestrator = None
 image_generator = None
 text_generator = None
 initialization_status = "starting"
 
 def initialize_components_background():
-    """Initialize components in a background thread"""
+    """
+    Initialize components in a background thread
+    OPTIMIZATION: Only load orchestrator (on CPU), other models load on-demand
+    """
     global llm_orchestrator, image_generator, text_generator, initialization_status
     
     print("Starting background initialization of components...")
+    print("MEMORY OPTIMIZATION: Only orchestrator loads at startup, other models load on-demand")
     initialization_status = "loading"
     
-    # Try to initialize LLM orchestrator
+    # Initialize LLM orchestrator on CPU (always loaded, lightweight)
     try:
-        print("Loading LLM Orchestrator (Llama 3.2)...")
+        print("Loading LLM Orchestrator (Llama 3.2) on CPU...")
         llm_orchestrator = LLMOrchestrator()
-        print("LLM Orchestrator initialized successfully!")
+        print("[OK] LLM Orchestrator initialized successfully on CPU!")
     except Exception as e:
         print(f"Error initializing LLM Orchestrator: {e}")
         print("Chat features will operate in fallback mode.")
         llm_orchestrator = None
 
-    # Try to initialize image generator separately
+    # Initialize image generator with lazy loading (doesn't load model yet)
     try:
-        print("Loading Image Generator...")
-        image_generator = ImageGenerator()
-        print("Image Generator initialized successfully!")
+        print("Initializing Image Generator (lazy loading)...")
+        image_generator = ImageGenerator()  # Model loads when generate_image() is called
+        print("[OK] Image Generator initialized (model will load on first use)")
     except Exception as e:
         print(f"Error initializing Image Generator: {e}")
         print("Image generation will use placeholder images.")
         image_generator = None
 
-    # Try to initialize text generator (Qwen2)
+    # Initialize text generator with lazy loading (doesn't load model yet)
     try:
-        print("Loading Text Generator (Qwen2.5-0.5B)...")
-        text_generator = TextGenerator()
-        print("Text Generator initialized successfully!")
+        print("Initializing Text Generator (lazy loading)...")
+        text_generator = TextGenerator()  # Model loads when generate_content() is called
+        print("[OK] Text Generator initialized (model will load on first use)")
     except Exception as e:
         print(f"Error initializing Text Generator: {e}")
         print("Text generation will use fallback responses.")
         text_generator = None
 
     # Update status
-    if llm_orchestrator is not None or image_generator is not None or text_generator is not None:
+    if llm_orchestrator is not None:
         initialization_status = "ready"
-        print("Background initialization completed successfully!")
+        print("="*60)
+        print("[OK] Background initialization completed successfully!")
+        print("[OK] Orchestrator: Running on CPU (always available)")
+        print("[OK] Image Generator: Lazy loading enabled (loads to VRAM when needed)")
+        print("[OK] Text Generator: Lazy loading enabled (loads to VRAM when needed)")
+        print("="*60)
     else:
         initialization_status = "failed"
-        print("WARNING: All components failed to initialize. Service will run with limited functionality.")
+        print("WARNING: Orchestrator failed to initialize. Service will run with limited functionality.")
 
 # Start background initialization
 print("Starting Brandmate server...")
@@ -158,8 +169,8 @@ async def process_message(chat_id: str, message: str, conversation_history: list
             elif tool_name == "text_generation":
                 prompt = result["parameters"].get("prompt", message)
                 
-                # Use Qwen2 text generator if available
-                if text_generator and text_generator.model_loaded:
+                # Use Qwen2 text generator (lazy loading - model loads automatically on first use)
+                if text_generator:
                     try:
                         generated_text = await text_generator.generate_content(
                             prompt=prompt,
@@ -449,8 +460,8 @@ async def chat(request: ChatRequest):
             elif tool_name == "text_generation":
                 prompt = result["parameters"].get("prompt", request.message)
                 
-                # Use Qwen2 text generator if available
-                if text_generator and text_generator.model_loaded:
+                # Use Qwen2 text generator (lazy loading - model loads automatically on first use)
+                if text_generator:
                     try:
                         generated_text = await text_generator.generate_content(
                             prompt=prompt,

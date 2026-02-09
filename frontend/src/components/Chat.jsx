@@ -16,18 +16,29 @@ const Chat = () => {
   const queryClient = useQueryClient();
   const [localMessages, setLocalMessages] = useState([]);
   const abortControllerRef = useRef(null);
+  const lastAbortRef = useRef(false);
 
   // Only load chat data if we have a chatId and no local messages
   const { data: chatData, isLoading: chatLoading } = useChat(chatId);
 
   // Send message mutation with custom onSuccess handler
   const sendMessageMutation = useMutation({
+    // Explicitly disable retries so aborted requests don't get retried
+    retry: false,
     mutationFn: ({ chatId, data }) => {
-      // Create a new AbortController for this request
+      // Clear any previous abort flag and create a new AbortController
+      lastAbortRef.current = false;
       abortControllerRef.current = new AbortController();
       return api.sendMessage(chatId, data, abortControllerRef.current.signal);
     },
     onSuccess: (response, variables) => {
+      // If we aborted this request, ignore the success handler
+      if (lastAbortRef.current) {
+        lastAbortRef.current = false;
+        abortControllerRef.current = null;
+        return;
+      }
+
       const { chatId } = variables;
 
       // Clear AbortController
@@ -46,7 +57,10 @@ const Chat = () => {
       abortControllerRef.current = null;
 
       // Don't show error message if request was aborted
-      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') {
+        // Mark we handled the abort and remove the pending local message
+        lastAbortRef.current = false;
+        setLocalMessages([]);
         return;
       }
 
@@ -202,10 +216,13 @@ const Chat = () => {
 
   const handleStop = () => {
     if (abortControllerRef.current) {
+      // Mark that we intentionally aborted this request so handlers can ignore it
+      lastAbortRef.current = true;
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    sendMessageMutation.reset();
+    // Don't call reset() as it can trigger onSuccess callbacks or side-effects
+    // The mutation will settle into an error state and our handlers will ignore it
   };
 
   const isLoading =

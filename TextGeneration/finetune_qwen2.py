@@ -286,7 +286,7 @@ Write an engaging Instagram caption for a luxury embroidered khaddar shawl from 
             do_sample=True,
             top_p=0.9,
             pad_token_id=tokenizer.eos_token_id,
-            repetition_penalty=1.1,
+            repetition_penalty=1.0,
         )
     
     response = tokenizer.decode(outputs[0], skip_special_tokens=False)

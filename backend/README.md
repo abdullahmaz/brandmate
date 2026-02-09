@@ -227,7 +227,7 @@ MODEL_CONFIG = {
     "max_length": 2048,
     "temperature": 0.7,
     "top_p": 0.9,
-    "repetition_penalty": 1.1
+    "repetition_penalty": 1.0
 }
 ```
 

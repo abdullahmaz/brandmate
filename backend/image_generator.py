@@ -10,33 +10,42 @@ import gc
 
 class ImageGenerator:
     def __init__(self, lora_path: Optional[str] = None):
-        # Using Openjourney model (fine-tuned on Midjourney images)
-        model_name = "prompthero/openjourney"
-
-        print(f"Loading Openjourney image generation model: {model_name}")
-        
-        # Initialize LoRA loaded flag
+        """Initialize ImageGenerator with lazy loading - model loads only when needed"""
+        self.model_name = "prompthero/openjourney"
+        self.lora_path = lora_path
+        self.pipe = None
         self.lora_loaded = False
+        self.model_loaded = False
+        
+        print("ImageGenerator initialized with lazy loading (model will load on first use)")
+    
+    def load_model(self):
+        """Load model into VRAM when needed - called before image generation"""
+        if self.model_loaded:
+            print("Image model already loaded, skipping...")
+            return
+        
+        print(f"Loading Openjourney image generation model into VRAM: {self.model_name}")
         
         try:
             # Determine device and dtype
             device = "cuda" if torch.cuda.is_available() else "cpu"
             dtype = torch.float16 if torch.cuda.is_available() else torch.float32
             
-            # Load the pipeline with optimizations
+            # Load the pipeline with optimizations into VRAM
             self.pipe = DiffusionPipeline.from_pretrained(
-                model_name,
+                self.model_name,
                 torch_dtype=dtype,
                 use_safetensors=True,  # Faster loading
             )
             
-            # Move pipeline to device
+            # Move pipeline to device (VRAM if available)
             if torch.cuda.is_available():
                 self.pipe = self.pipe.to(device)
             
             # Load fine-tuned LoRA weights if provided
-            if lora_path:
-                self._load_lora_weights(lora_path)
+            if self.lora_path:
+                self._load_lora_weights(self.lora_path)
             else:
                 # Try to load from default location
                 default_lora_path = self._get_default_lora_path()
@@ -45,14 +54,46 @@ class ImageGenerator:
                     self._load_lora_weights(default_lora_path)
             
             if self.lora_loaded:
-                print("✅ Image generation model loaded with fine-tuned LoRA weights!")
+                print("[OK] Image generation model loaded with fine-tuned LoRA weights into VRAM!")
             else:
-                print("✅ Image generation model loaded successfully! (using base model)")
+                print("[OK] Image generation model loaded successfully into VRAM! (using base model)")
             
+            self.model_loaded = True
                 
         except Exception as e:
             print(f"Error loading image model: {e}")
             self.pipe = None
+            self.model_loaded = False
+    
+    def unload_model(self):
+        """Unload model from VRAM after generation - frees up memory"""
+        if not self.model_loaded or self.pipe is None:
+            print("Image model not loaded, nothing to unload")
+            return
+        
+        print("Unloading image model from VRAM...")
+        
+        try:
+            # Delete pipeline components and free VRAM
+            del self.pipe
+            self.pipe = None
+            self.model_loaded = False
+            self.lora_loaded = False
+            
+            # Force garbage collection and clear CUDA cache
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            
+            print("[OK] Image model unloaded successfully, VRAM freed")
+            
+        except Exception as e:
+            print(f"Error unloading image model: {e}")
+            # Still mark as unloaded to prevent issues
+            self.pipe = None
+            self.model_loaded = False
+            self.lora_loaded = False
     
     def _get_default_lora_path(self) -> Optional[str]:
         """Get the default path to the fine-tuned LoRA model"""
@@ -103,7 +144,7 @@ class ImageGenerator:
                     # Replace pipeline UNet with merged model and ensure correct device/dtype
                     self.pipe.unet = merged_unet.to(device=device, dtype=dtype)
                     self.pipe.unet.eval()
-                    print("✅ UNet LoRA weights merged successfully")
+                    print("[OK] UNet LoRA weights merged successfully")
                     
                     # Load Text Encoder LoRA adapter
                     print(f"Loading Text Encoder LoRA from: {text_encoder_lora_path}")
@@ -120,7 +161,7 @@ class ImageGenerator:
                     # Replace pipeline Text Encoder with merged model and ensure correct device/dtype
                     self.pipe.text_encoder = merged_text_encoder.to(device=device, dtype=dtype)
                     self.pipe.text_encoder.eval()
-                    print("✅ Text Encoder LoRA weights merged successfully")
+                    print("[OK] Text Encoder LoRA weights merged successfully")
                     
                     # Ensure VAE is also on correct device (it should be, but double-check)
                     self.pipe.vae = self.pipe.vae.to(device=device, dtype=dtype)
@@ -139,8 +180,8 @@ class ImageGenerator:
                     except Exception as e:
                         print(f"Note: Could not enable memory optimizations: {e}")
                     
-                    print("✅ Successfully merged fine-tuned LoRA weights into base model!")
-                    print(f"✅ All pipeline components on device: {device}")
+                    print("[OK] Successfully merged fine-tuned LoRA weights into base model!")
+                    print(f"[OK] All pipeline components on device: {device}")
                     self.lora_loaded = True
                     
                 except ImportError:
@@ -168,8 +209,12 @@ class ImageGenerator:
     async def generate_image(self, prompt: str, style: str = "eastern_clothing") -> Optional[str]:
         """
         Generate an image using local Stable Diffusion
+        NOTE: This method now handles automatic model loading and unloading
         """
-        if self.pipe is None:
+        # Load model before generation (if not already loaded)
+        self.load_model()
+        
+        if self.pipe is None or not self.model_loaded:
             print("Image generation model not loaded, returning placeholder")
             return self._create_placeholder_image(prompt)
         
@@ -234,7 +279,7 @@ class ImageGenerator:
                     else:
                         raise
             
-            print(f"✅ Image generated successfully!")
+            print("[OK] Image generated successfully!")
             
             # Convert to base64 for web display
             buffer = io.BytesIO()
@@ -246,6 +291,9 @@ class ImageGenerator:
         except Exception as e:
             print(f"Error generating image: {e}")
             return self._create_placeholder_image(prompt)
+        finally:
+            # Always unload model after generation to free VRAM for other tasks
+            self.unload_model()
     
     def _enhance_prompt_for_eastern_clothing(self, prompt: str, style: str) -> str:
         """

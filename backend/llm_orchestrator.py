@@ -8,27 +8,32 @@ import gc
 class LLMOrchestrator:
     def __init__(self):
         # Use Llama 3.2 3B Instruct for fast loading and good tool calling
+        # IMPORTANT: Load on CPU only to keep it always available without clogging VRAM
         model_name = "meta-llama/Llama-3.2-3B-Instruct"
         print(f"Loading Llama 3.2 3B Instruct model: {model_name}")
+        print("NOTE: Loading orchestrator on CPU to preserve VRAM for specialized models")
         
         try:
             # Load tokenizer first
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             
-            # Load model with appropriate settings for 3B model
+            # Force model to load on CPU only - orchestrator runs continuously on CPU
+            # This frees up VRAM for image and text generation models that load on-demand
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float32,  # Use float32 for CPU
+                device_map="cpu",  # Force CPU only - never use VRAM
                 use_safetensors=True,
+                low_cpu_mem_usage=True,  # Optimize CPU memory usage
             )
             
-            # Create pipeline for easier text generation
+            # Create pipeline for easier text generation - runs on CPU
+            # Note: Don't specify device when using device_map (accelerate handles it)
             self.pipe = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                torch_dtype=torch.float32,  # CPU uses float32
             )
             
             print("Llama 3.2 3B Instruct loaded successfully!")
