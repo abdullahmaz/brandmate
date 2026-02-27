@@ -9,19 +9,20 @@ import torch
 import gc
 
 class ImageGenerator:
-    def __init__(self, lora_path: Optional[str] = None):
+    def __init__(self, lora_path: Optional[str] = None, device: Optional[str] = None):
         # Using Openjourney model (fine-tuned on Midjourney images)
         model_name = "prompthero/openjourney"
+        use_cuda = (device == "cuda") if device is not None else torch.cuda.is_available()
+        self._device = device if device is not None else ("cuda" if use_cuda else "cpu")
 
-        print(f"Loading Openjourney image generation model: {model_name}")
+        print(f"Loading Openjourney image generation model: {model_name} (device={self._device})")
         
         # Initialize LoRA loaded flag
         self.lora_loaded = False
         
         try:
             # Determine device and dtype
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+            dtype = torch.float16 if use_cuda else torch.float32
             
             # Load the pipeline with optimizations
             self.pipe = DiffusionPipeline.from_pretrained(
@@ -31,8 +32,7 @@ class ImageGenerator:
             )
             
             # Move pipeline to device
-            if torch.cuda.is_available():
-                self.pipe = self.pipe.to(device)
+            self.pipe = self.pipe.to(self._device)
             
             # Load fine-tuned LoRA weights if provided
             if lora_path:
@@ -85,8 +85,8 @@ class ImageGenerator:
                 try:
                     from peft import PeftModel
                     
-                    device = "cuda" if torch.cuda.is_available() else "cpu"
-                    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                    device = getattr(self, "_device", "cuda" if torch.cuda.is_available() else "cpu")
+                    dtype = torch.float16 if device == "cuda" else torch.float32
                     
                     # Load UNet LoRA adapter
                     print(f"Loading UNet LoRA from: {unet_lora_path}")
@@ -180,13 +180,12 @@ class ImageGenerator:
             print(f"Generating image with prompt: {enhanced_prompt}")
             
             # Ensure pipeline is ready for inference
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = getattr(self, "_device", "cuda" if torch.cuda.is_available() else "cpu")
             
             # Verify all components are on correct device
-            if torch.cuda.is_available():
-                self.pipe.unet = self.pipe.unet.to(device)
-                self.pipe.text_encoder = self.pipe.text_encoder.to(device)
-                self.pipe.vae = self.pipe.vae.to(device)
+            self.pipe.unet = self.pipe.unet.to(device)
+            self.pipe.text_encoder = self.pipe.text_encoder.to(device)
+            self.pipe.vae = self.pipe.vae.to(device)
             
             # Ensure models are in eval mode
             self.pipe.unet.eval()

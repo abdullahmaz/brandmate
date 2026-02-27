@@ -5,9 +5,7 @@ import uvicorn
 import asyncio
 import threading
 from dotenv import load_dotenv
-from llm_orchestrator import LLMOrchestrator
-from image_generator import ImageGenerator
-from text_generator import TextGenerator
+from model_loader import get_llm, get_image_generator, get_text_generator, offload_image_generator, offload_text_generator, load_llm_at_startup
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
@@ -25,60 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variables for components
-llm_orchestrator = None
-image_generator = None
-text_generator = None
-initialization_status = "starting"
-
-def initialize_components_background():
-    """Initialize components in a background thread"""
-    global llm_orchestrator, image_generator, text_generator, initialization_status
-    
-    print("Starting background initialization of components...")
-    initialization_status = "loading"
-    
-    # Try to initialize LLM orchestrator
-    try:
-        print("Loading LLM Orchestrator (Llama 3.2)...")
-        llm_orchestrator = LLMOrchestrator()
-        print("LLM Orchestrator initialized successfully!")
-    except Exception as e:
-        print(f"Error initializing LLM Orchestrator: {e}")
-        print("Chat features will operate in fallback mode.")
-        llm_orchestrator = None
-
-    # Try to initialize image generator separately
-    try:
-        print("Loading Image Generator...")
-        image_generator = ImageGenerator()
-        print("Image Generator initialized successfully!")
-    except Exception as e:
-        print(f"Error initializing Image Generator: {e}")
-        print("Image generation will use placeholder images.")
-        image_generator = None
-
-    # Try to initialize text generator (Qwen2)
-    try:
-        print("Loading Text Generator (Qwen2.5-0.5B)...")
-        text_generator = TextGenerator()
-        print("Text Generator initialized successfully!")
-    except Exception as e:
-        print(f"Error initializing Text Generator: {e}")
-        print("Text generation will use fallback responses.")
-        text_generator = None
-
-    # Update status
-    if llm_orchestrator is not None or image_generator is not None or text_generator is not None:
-        initialization_status = "ready"
-        print("Background initialization completed successfully!")
-    else:
-        initialization_status = "failed"
-        print("WARNING: All components failed to initialize. Service will run with limited functionality.")
-
-# Start background initialization
-print("Starting Brandmate server...")
-threading.Thread(target=initialize_components_background, daemon=True).start()
+# LLM loads at startup and stays loaded. Image/Text load on demand and offload after use.
+print("Starting Brandmate server... (LLM loading at startup; Image/Text load on demand)")
+threading.Thread(target=load_llm_at_startup, daemon=True).start()
 
 class ChatMessage(BaseModel):
     role: str  # "system", "user", "assistant"
@@ -100,8 +47,8 @@ class ChatResponse(BaseModel):
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
 
-async def process_message(chat_id: str, message: str, conversation_history: list[ChatMessage]) -> ChatResponse:
-    """Process a message and return response"""
+async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage]) -> ChatResponse:
+    """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
         # Convert conversation history to list of dicts for LLM orchestrator
         history = []
@@ -128,38 +75,49 @@ async def process_message(chat_id: str, message: str, conversation_history: list
             tool_name = result["tool"]
             tool_used = tool_name
             
-            if tool_name == "image_generation" and image_generator:
-                try:
-                    # Extract prompt from parameters or use the original message
-                    prompt = result["parameters"].get("prompt", message)
-                    style = result["parameters"].get("style", "eastern_clothing")
-                    
-                    # Generate image using local Stable Diffusion
-                    generated_image = await image_generator.generate_image(
-                        prompt=prompt,
-                        style=style
-                    )
-                    
-                    # Store image in S3
+            if tool_name == "image_generation":
+                image_generator, img_status = get_image_generator()
+                if img_status == "loading":
+                    response_message = "The image model is still loading. Please try again in a moment."
+                    tool_used = "loading"
+                elif image_generator and img_status == "ready":
                     try:
-                        print(f"DEBUG: Attempting to store image in S3...")
-                        s3_url = await storage_service.store_generated_image(generated_image, prompt)
-                        print(f"DEBUG: S3 URL generated: {s3_url}")
-                    except Exception as s3_error:
-                        print(f"S3 storage error: {s3_error}")
-                        s3_url = generated_image  # Fallback to base64
-                        print(f"DEBUG: Using fallback base64 image")
-                    
-                    response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
-                except Exception as img_error:
-                    print(f"Image generation error: {img_error}")
-                    response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
+                        # Extract prompt from parameters or use the original message
+                        prompt = result["parameters"].get("prompt", message)
+                        style = result["parameters"].get("style", "eastern_clothing")
+                        
+                        # Generate image using local Stable Diffusion
+                        generated_image = await image_generator.generate_image(
+                            prompt=prompt,
+                            style=style
+                        )
+                        
+                        # Store image in S3
+                        try:
+                            print(f"DEBUG: Attempting to store image in S3...")
+                            s3_url = await storage_service.store_generated_image(generated_image, prompt)
+                            print(f"DEBUG: S3 URL generated: {s3_url}")
+                        except Exception as s3_error:
+                            print(f"S3 storage error: {s3_error}")
+                            s3_url = generated_image  # Fallback to base64
+                            print(f"DEBUG: Using fallback base64 image")
+                        
+                        response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
+                    except Exception as img_error:
+                        print(f"Image generation error: {img_error}")
+                        response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
+                    finally:
+                        offload_image_generator()
+                else:
+                    response_message = "Image generation service is currently unavailable."
                 
             elif tool_name == "text_generation":
                 prompt = result["parameters"].get("prompt", message)
-                
-                # Use Qwen2 text generator if available
-                if text_generator and text_generator.model_loaded:
+                text_generator, txt_status = get_text_generator()
+                if txt_status == "loading":
+                    response_message = "The text generation model is still loading. Please try again in a moment."
+                    tool_used = "loading"
+                elif text_generator and txt_status == "ready" and text_generator.model_loaded:
                     try:
                         generated_text = await text_generator.generate_content(
                             prompt=prompt,
@@ -168,6 +126,8 @@ async def process_message(chat_id: str, message: str, conversation_history: list
                     except Exception as text_error:
                         print(f"Text generation error: {text_error}")
                         response_message = f"I tried to generate content based on your request, but encountered an issue."
+                    finally:
+                        offload_text_generator()
                 else:
                     response_message = f"Text generation service is currently unavailable."
                 
@@ -256,19 +216,20 @@ async def send_message(chat_id: str, request: MessageRequest):
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         
-        # Check initialization status
-        if initialization_status == "loading":
+        # Get LLM (loads on first use). If loading, ask user to wait.
+        llm_orchestrator, llm_status = get_llm()
+        if llm_status == "loading":
             return ChatResponse(
-                message="The AI models are still loading in the background. This may take several minutes on first startup. Please wait and try again in a few minutes. The server is running but the AI components need more time to initialize.",
+                message="The AI models are still loading. This may take a few minutes on first use. Please wait and try again shortly.",
                 tool="loading"
             )
-        
-        # Check if any components are available
-        if not llm_orchestrator and not image_generator:
-            return ChatResponse(
-                message="Service components failed to initialize. Please check server logs for details.",
-                tool="error"
-            )
+        if llm_status == "failed" and llm_orchestrator is None:
+            image_generator, img_status = get_image_generator()
+            if img_status != "ready" or image_generator is None:
+                return ChatResponse(
+                    message="Service components failed to initialize. Please check server logs for details.",
+                    tool="error"
+                )
         
         # Save user message
         try:
@@ -288,11 +249,16 @@ async def send_message(chat_id: str, request: MessageRequest):
                 )
             else:
                 print(f"Database error: {db_error}")
-                # Continue without database if it's not available
                 pass
         
-        # Process the message
-        return await process_message(chat_id, request.message, request.conversation_history)
+        if llm_orchestrator is None:
+            return ChatResponse(
+                message="The language model is unavailable. Image generation may be available in a new chat.",
+                tool="limited",
+                chat_id=chat_id
+            )
+        
+        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history)
         
     except HTTPException:
         raise
@@ -303,19 +269,20 @@ async def send_message(chat_id: str, request: MessageRequest):
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
-        # Check initialization status
-        if initialization_status == "loading":
+        # Get LLM (loads on first use). If loading, ask user to wait.
+        llm_orchestrator, llm_status = get_llm()
+        if llm_status == "loading":
             return ChatResponse(
-                message="The AI models are still loading in the background. This may take several minutes on first startup. Please wait and try again in a few minutes. The server is running but the AI components need more time to initialize.",
+                message="The AI models are still loading. This may take a few minutes on first use. Please wait and try again shortly.",
                 tool="loading"
             )
-        
-        # Check if any components are available
-        if not llm_orchestrator and not image_generator:
-            return ChatResponse(
-                message="Service components failed to initialize. Please check server logs for details.",
-                tool="error"
-            )
+        if llm_status == "failed" and llm_orchestrator is None:
+            image_generator, img_status = get_image_generator()
+            if img_status != "ready" or image_generator is None:
+                return ChatResponse(
+                    message="Service components failed to initialize. Please check server logs for details.",
+                    tool="error"
+                )
         
         # Get or create chat
         chat_id = request.chat_id
@@ -343,173 +310,55 @@ async def chat(request: ChatRequest):
                 )
             else:
                 print(f"Database error: {db_error}")
-                # Continue without database if it's not available
                 chat_id = chat_id or "temp-chat"
         
         # If LLM is not available but image generator is, we can still handle some requests
-        if not llm_orchestrator:
-            # Simple fallback for image requests
-            if any(word in request.message.lower() for word in ["image", "picture", "photo", "design"]):
+        if llm_orchestrator is None:
+            image_generator, img_status = get_image_generator()
+            if img_status == "ready" and image_generator and any(word in request.message.lower() for word in ["image", "picture", "photo", "design"]):
                 try:
-                    if image_generator:
-                        generated_image = await image_generator.generate_image(
-                            prompt=request.message,
-                            style="eastern_clothing"
-                        )
-                        
-                        # Store image in S3
-                        try:
-                            s3_url = await storage_service.store_generated_image(generated_image, request.message)
-                        except Exception as s3_error:
-                            print(f"S3 storage error: {s3_error}")
-                            s3_url = generated_image  # Fallback to base64
-                        
-                        # Save assistant message with image
-                        try:
-                            await database_service.create_message(MessageCreate(
-                                chat_id=chat_id,
-                                role=MessageRole.ASSISTANT,
-                                content="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
-                                message_type=MessageType.IMAGE,
-                                s3_url=s3_url
-                            ))
-                        except Exception as db_error:
-                            print(f"Database error saving fallback message: {db_error}")
-                        
-                        return ChatResponse(
-                            message="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
-                            image=s3_url,
-                            tool="image_generation",
-                            chat_id=chat_id
-                        )
+                    generated_image = await image_generator.generate_image(
+                        prompt=request.message,
+                        style="eastern_clothing"
+                    )
+                    try:
+                        s3_url = await storage_service.store_generated_image(generated_image, request.message)
+                    except Exception as s3_error:
+                        print(f"S3 storage error: {s3_error}")
+                        s3_url = generated_image
+                    try:
+                        await database_service.create_message(MessageCreate(
+                            chat_id=chat_id,
+                            role=MessageRole.ASSISTANT,
+                            content="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
+                            message_type=MessageType.IMAGE,
+                            s3_url=s3_url
+                        ))
+                    except Exception as db_error:
+                        print(f"Database error saving fallback message: {db_error}")
+                    return ChatResponse(
+                        message="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
+                        image=s3_url,
+                        tool="image_generation",
+                        chat_id=chat_id
+                    )
                 except Exception as img_error:
                     print(f"Image generation error in fallback mode: {img_error}")
-            
-            # General fallback message
+                finally:
+                    offload_image_generator()
             await database_service.create_message(MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
                 message_type=MessageType.TEXT
             ))
-            
             return ChatResponse(
                 message="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
                 tool="limited",
                 chat_id=chat_id
             )
         
-        # Convert conversation history to list of dicts for LLM orchestrator
-        conversation_history = []
-        for msg in request.conversation_history:
-            conversation_history.append({
-                "role": msg.role,
-                "content": msg.content
-            })
-        
-        # Use the LLM orchestrator to process the request with conversation history
-        result = await llm_orchestrator.process_request(request.message, conversation_history)
-        
-        response_message = ""
-        generated_image = None
-        tool_used = None
-        s3_url = None
-        
-        if result["type"] == "tool_call":
-            tool_name = result["tool"]
-            tool_used = tool_name
-            
-            if tool_name == "image_generation" and image_generator:
-                try:
-                    # Extract prompt from parameters or use the original message
-                    prompt = result["parameters"].get("prompt", request.message)
-                    style = result["parameters"].get("style", "eastern_clothing")
-                    
-                    # Generate image using local Stable Diffusion
-                    generated_image = await image_generator.generate_image(
-                        prompt=prompt,
-                        style=style
-                    )
-                    
-                    # Store image in S3
-                    try:
-                        print(f"DEBUG: Attempting to store image in S3...")
-                        s3_url = await storage_service.store_generated_image(generated_image, prompt)
-                        print(f"DEBUG: S3 URL generated: {s3_url}")
-                    except Exception as s3_error:
-                        print(f"S3 storage error: {s3_error}")
-                        s3_url = generated_image  # Fallback to base64
-                        print(f"DEBUG: Using fallback base64 image")
-                    
-                    response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
-                except Exception as img_error:
-                    print(f"Image generation error: {img_error}")
-                    response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
-                
-            elif tool_name == "text_generation":
-                prompt = result["parameters"].get("prompt", request.message)
-                
-                # Use Qwen2 text generator if available
-                if text_generator and text_generator.model_loaded:
-                    try:
-                        generated_text = await text_generator.generate_content(
-                            prompt=prompt,
-                        )
-                        response_message = generated_text
-                    except Exception as text_error:
-                        print(f"Text generation error: {text_error}")
-                        response_message = f"I tried to generate content based on your request, but encountered an issue."
-                else:
-                    response_message = f"Text generation service is currently unavailable."
-                
-            elif tool_name == "video_generation":
-                description = result["parameters"].get("description", request.message)
-                video_type = result["parameters"].get("video_type", "promotional")
-                response_message = f"I'll help you create a {video_type} video for: {description}. This feature is coming soon!"
-                
-            elif tool_name == "website_generation":
-                brand_info = result["parameters"].get("brand_info", request.message)
-                page_type = result["parameters"].get("page_type", "landing")
-                response_message = f"I'll help you create a {page_type} page for: {brand_info}. This feature is coming soon!"
-                
-            else:
-                response_message = result["response"]
-                
-        else:
-            # Generic conversation response
-            response_message = result["response"]
-            tool_used = "conversation"
-        
-        # Save assistant message
-        try:
-            message_type = storage_service.get_message_type_from_tool(tool_used) if tool_used != "conversation" else MessageType.TEXT
-            await database_service.create_message(MessageCreate(
-                chat_id=chat_id,
-                role=MessageRole.ASSISTANT,
-                content=response_message,
-                message_type=message_type,
-                s3_url=s3_url
-            ))
-        except Exception as db_error:
-            print(f"Database error saving assistant message: {db_error}")
-            # Continue without saving to database
-        
-        # Convert conversation history back to ChatMessage objects
-        updated_conversation = []
-        if "conversation_history" in result:
-            for msg in result["conversation_history"]:
-                updated_conversation.append(ChatMessage(
-                    role=msg["role"],
-                    content=msg["content"]
-                ))
-        
-        return ChatResponse(
-            message=response_message,
-            image=s3_url if s3_url else generated_image,
-            tool=tool_used,
-            chat_id=chat_id,
-            conversation_history=updated_conversation
-        )
+        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history)
         
     except Exception as e:
         print(f"Error in chat endpoint: {e}")

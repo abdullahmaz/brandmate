@@ -79,12 +79,14 @@ The API will be available at `http://localhost:8000`
 ```
 backend/
 ├── main.py                # FastAPI server and API endpoints
+├── model_loader.py        # Lazy model loading and device placement (on-demand load)
 ├── llm_orchestrator.py    # LLM orchestration and tool calling
 ├── image_generator.py     # Image generation using OpenJourney
+├── text_generator.py      # Marketing text generation (Qwen2.5-0.5B)
 ├── database_models.py     # Pydantic models for database entities
-├── database_service.py    # Database operations with Supabase
+├── database_service.py   # Database operations with Supabase
 ├── storage_service.py     # File storage operations with AWS S3
-├── supabase_client.py     # Supabase client initialization
+├── supabase_client.py    # Supabase client initialization
 ├── s3_client.py           # AWS S3 client initialization
 ├── requirements.txt       # Python dependencies
 ├── env_example.txt        # Environment variables template
@@ -206,6 +208,12 @@ S3_BUCKET_NAME=your_s3_bucket_name_here
 # Model Configuration (Optional)
 MODEL_CACHE_DIR=./models
 
+# Device placement: which models run on GPU (VRAM) vs CPU (RAM). Use "cuda" or "cpu".
+# Default: LLM and Image use GPU when available; Text uses CPU to save VRAM for the other two.
+MODEL_LLM_DEVICE=cuda
+MODEL_IMAGE_DEVICE=cuda
+MODEL_TEXT_DEVICE=cpu
+
 # Server Configuration (Optional)
 HOST=0.0.0.0
 PORT=8000
@@ -216,7 +224,12 @@ DEBUG=False
 - **HF_TOKEN** is required to download and use AI models from Hugging Face
 - **Supabase** credentials enable chat history persistence; without them, chats work but aren't saved
 - **AWS S3** credentials enable permanent image storage; without them, images are returned as base64 data URLs
-- All models are downloaded automatically on first run if not cached
+- Models load **on first use** (lazy loading), not at server startup
+
+**Device placement (RAM vs VRAM):**
+- `MODEL_LLM_DEVICE`, `MODEL_IMAGE_DEVICE`, `MODEL_TEXT_DEVICE` control where each model runs (`cuda` or `cpu`).
+- **Recommendation:** Put LLM and Image on **VRAM** (GPU) for speed; put Text on **RAM** (CPU) to save VRAM when using a single GPU. If you have enough VRAM, set all to `cuda`.
+- Defaults: LLM and Image use `cuda` when available; Text uses `cpu` when CUDA is available (to free VRAM for the larger models).
 
 ### Model Configuration
 

@@ -17,10 +17,11 @@ from typing import Optional
 
 
 class TextGenerator:
-    def __init__(self):
+    def __init__(self, device: Optional[str] = None):
         base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+        use_cuda = (device == "cuda") if device is not None else torch.cuda.is_available()
         
-        print(f"Loading Fine Tuned Qwen2.5-0.5B-Instruct model")
+        print(f"Loading Fine Tuned Qwen2.5-0.5B-Instruct model (device={'cuda' if use_cuda else 'cpu'})")
         print(f"Base model: {base_model_name}")
         
         try:
@@ -32,11 +33,13 @@ class TextGenerator:
             # Load base model
             self.model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float16 if use_cuda else torch.float32,
+                device_map="auto" if use_cuda else None,
                 low_cpu_mem_usage=True,
                 trust_remote_code=True
             )
+            if not use_cuda and self.model is not None:
+                self.model = self.model.to("cpu")
             
             print("✓ Model loaded successfully!")
             
@@ -45,7 +48,7 @@ class TextGenerator:
             
             # Try to compile model for faster inference (PyTorch 2.0+)
             try:
-                if hasattr(torch, 'compile') and torch.cuda.is_available():
+                if hasattr(torch, 'compile') and use_cuda:
                     self.model = torch.compile(self.model, mode="reduce-overhead")
                     print("Model compiled with torch.compile for faster inference")
             except Exception as compile_error:

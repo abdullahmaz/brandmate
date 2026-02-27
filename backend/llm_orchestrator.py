@@ -6,10 +6,11 @@ import torch
 import gc
 
 class LLMOrchestrator:
-    def __init__(self):
+    def __init__(self, device: Optional[str] = None):
         # Use Llama 3.2 3B Instruct for fast loading and good tool calling
         model_name = "meta-llama/Llama-3.2-3B-Instruct"
-        print(f"Loading Llama 3.2 3B Instruct model: {model_name}")
+        use_cuda = (device == "cuda") if device else torch.cuda.is_available()
+        print(f"Loading Llama 3.2 3B Instruct model: {model_name} (device={device or ('cuda' if use_cuda else 'cpu')})")
         
         try:
             # Load tokenizer first
@@ -18,17 +19,19 @@ class LLMOrchestrator:
             # Load model with appropriate settings for 3B model
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto" if torch.cuda.is_available() else None,
+                torch_dtype=torch.float16 if use_cuda else torch.float32,
+                device_map="auto" if use_cuda else None,
                 use_safetensors=True,
             )
+            if not use_cuda and self.model is not None:
+                self.model = self.model.to("cpu")
             
             # Create pipeline for easier text generation
             self.pipe = pipeline(
                 "text-generation",
                 model=self.model,
                 tokenizer=self.tokenizer,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                torch_dtype=torch.float16 if use_cuda else torch.float32,
             )
             
             print("Llama 3.2 3B Instruct loaded successfully!")
