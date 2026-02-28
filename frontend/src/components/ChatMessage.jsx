@@ -8,6 +8,20 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const label = isUser ? 'You' : 'Assistant';
 
+  const handleDownloadHtml = () => {
+    if (!html) return;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'landing-page.html';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleOpenPreviewInTab = () => {
     if (!html) return;
     const blob = new Blob([html], { type: 'text/html' });
@@ -50,7 +64,14 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
 
           {html && (
             <div className="mt-3 space-y-2">
-              <div className="rounded-xl border border-border/80 overflow-hidden bg-white max-h-[320px] min-h-[200px] flex flex-col">
+              <div className="group relative rounded-xl border border-border/80 overflow-hidden bg-white max-h-[320px] min-h-[200px] flex flex-col">
+                <button
+                  type="button"
+                  onClick={handleDownloadHtml}
+                  className="absolute right-2 top-2 z-10 rounded-md bg-black/70 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus:opacity-100"
+                >
+                  Download HTML
+                </button>
                 <iframe
                   title="Landing page preview"
                   srcDoc={html}
