@@ -1,9 +1,7 @@
 import json
 from typing import Dict, Any, List, Optional
-import os
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
-import gc
 
 class LLMOrchestrator:
     def __init__(self, device: Optional[str] = None):
@@ -111,17 +109,12 @@ class LLMOrchestrator:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "page_type": {
+                        "prompt": {
                             "type": "string",
-                            "description": "Type of page (landing, product, about, contact)",
-                            "default": "landing"
-                        },
-                        "brand_info": {
-                            "type": "string",
-                            "description": "Brand information and requirements"
+                            "description": "One comprehensive prompt containing all important brand/product info and requirements. If details are missing, the website generator should make reasonable assumptions."
                         }
                     },
-                    "required": ["brand_info"]
+                    "required": ["prompt"]
                 }
             }
         ]
@@ -261,7 +254,7 @@ class LLMOrchestrator:
 
         When users ask for websites, use:
         <website_generation>
-        {"parameters": {"brand_info": "brand details", "page_type": "landing"}}
+        {"parameters": {"prompt": "brand details + any requirements (landing page; assume missing details)"}}
 
         For general conversation, just respond normally. Always call tools directly without explanations.
 

@@ -39,6 +39,7 @@ export function ChatArea({ messages, isLoading }) {
             content={message.content}
             timestamp={message.timestamp}
             image={message.image}
+            html={message.html}
             tool={message.tool}
           />
         ))}

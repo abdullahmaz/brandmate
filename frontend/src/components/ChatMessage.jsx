@@ -4,9 +4,16 @@ import ReactMarkdown from 'react-markdown';
 /**
  * Component for rendering a single chat message
  */
-export function ChatMessage({ role, content, timestamp, image, tool }) {
+export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const label = isUser ? 'You' : 'Assistant';
+
+  const handleOpenPreviewInTab = () => {
+    if (!html) return;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="flex gap-4 px-4 py-5">
@@ -38,6 +45,27 @@ export function ChatMessage({ role, content, timestamp, image, tool }) {
                 alt="Generated content"
                 className="rounded-xl max-w-full max-h-[320px] object-contain"
               />
+            </div>
+          )}
+
+          {html && (
+            <div className="mt-3 space-y-2">
+              <div className="rounded-xl border border-border/80 overflow-hidden bg-white max-h-[320px] min-h-[200px] flex flex-col">
+                <iframe
+                  title="Landing page preview"
+                  srcDoc={html}
+                  sandbox="allow-same-origin"
+                  className="w-full flex-1 min-h-[200px] border-0"
+                  style={{ height: '320px' }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenPreviewInTab}
+                className="text-xs text-primary hover:underline"
+              >
+                Open in new tab
+              </button>
             </div>
           )}
 

@@ -78,8 +78,10 @@ const Chat = () => {
           content: msg.content,
           message_type: msg.message_type,
           s3_url: msg.s3_url,
+          metadata: msg.metadata,
           tool: msg.message_type !== "text" ? msg.message_type : null,
           image: msg.s3_url || null,
+          html: msg.message_type === "website" ? (msg.metadata?.html ?? null) : null,
           timestamp: formatDistanceToNow(new Date(msg.created_at), {
             addSuffix: true,
           }),
