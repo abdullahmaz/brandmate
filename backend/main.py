@@ -76,6 +76,9 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
             tool_used = tool_name
             
             if tool_name == "image_generation":
+                # Free text-model VRAM before loading image model (swap strategy).
+                # This keeps the image model warm for consecutive image requests.
+                offload_text_generator()
                 image_generator, img_status = get_image_generator()
                 if img_status == "loading":
                     response_message = "The image model is still loading. Please try again in a moment."
@@ -103,15 +106,17 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                             print(f"DEBUG: Using fallback base64 image")
                         
                         response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
+                        # Image model stays loaded — no offload here.
                     except Exception as img_error:
                         print(f"Image generation error: {img_error}")
                         response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
-                    finally:
-                        offload_image_generator()
                 else:
                     response_message = "Image generation service is currently unavailable."
                 
             elif tool_name == "text_generation":
+                # Free image-model VRAM before loading text model (swap strategy).
+                # This keeps the text model warm for consecutive text requests.
+                offload_image_generator()
                 prompt = result["parameters"].get("prompt", message)
                 text_generator, txt_status = get_text_generator()
                 if txt_status == "loading":
@@ -123,11 +128,10 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                             prompt=prompt,
                         )
                         response_message = generated_text
+                        # Text model stays loaded — no offload here.
                     except Exception as text_error:
                         print(f"Text generation error: {text_error}")
                         response_message = f"I tried to generate content based on your request, but encountered an issue."
-                    finally:
-                        offload_text_generator()
                 else:
                     response_message = f"Text generation service is currently unavailable."
                 
@@ -345,6 +349,9 @@ async def chat(request: ChatRequest):
                 except Exception as img_error:
                     print(f"Image generation error in fallback mode: {img_error}")
                 finally:
+                    # Delete the local reference BEFORE offloading so the GC can
+                    # immediately reclaim VRAM when offload() calls gc.collect().
+                    del image_generator
                     offload_image_generator()
             await database_service.create_message(MessageCreate(
                 chat_id=chat_id,

@@ -16,23 +16,40 @@ class LLMOrchestrator:
             # Load tokenizer first
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             
-            # Load model with appropriate settings for 3B model
+            # Load model with appropriate settings for 3B model.
+            # Try Flash Attention 2 first (Ampere+ GPU); fall back silently if unavailable.
+            extra_kwargs = {}
+            if use_cuda:
+                try:
+                    import flash_attn  # noqa: F401
+                    extra_kwargs["attn_implementation"] = "flash_attention_2"
+                    print("[LLM] Flash Attention 2 enabled.")
+                except ImportError:
+                    pass
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16 if use_cuda else torch.float32,
                 device_map="auto" if use_cuda else None,
                 use_safetensors=True,
+                **extra_kwargs,
             )
             if not use_cuda and self.model is not None:
                 self.model = self.model.to("cpu")
             
-            # Create pipeline for easier text generation
-            self.pipe = pipeline(
-                "text-generation",
+            # Create pipeline for easier text generation.
+            # device must be set explicitly — without it, transformers auto-detects
+            # CUDA and silently moves the model to GPU even when we loaded it on CPU.
+            pipe_kwargs = dict(
                 model=self.model,
                 tokenizer=self.tokenizer,
-                torch_dtype=torch.float16 if use_cuda else torch.float32,
+                dtype=torch.float16 if use_cuda else torch.float32,
             )
+            if use_cuda:
+                pipe_kwargs["device_map"] = "auto"
+            else:
+                pipe_kwargs["device"] = "cpu"
+            self.pipe = pipeline("text-generation", **pipe_kwargs)
             
             print("Llama 3.2 3B Instruct loaded successfully!")
             self.model_loaded = True
@@ -141,12 +158,14 @@ class LLMOrchestrator:
             # Convert conversation to Llama 3.2 format
             full_prompt = self._conversation_to_llama_format(conversation)
             
-            # Use the pipeline for generation with tool calling
+            # Use the pipeline for generation with tool calling.
+            # Greedy decoding (do_sample=False) is faster and more deterministic
+            # for tool-routing. max_new_tokens is capped at 400 — tool call JSON
+            # is always short; a full chat reply rarely needs more.
             response = self.pipe(
                 full_prompt,
-                max_new_tokens=2048,
-                temperature=0.7,
-                do_sample=True,
+                max_new_tokens=400,
+                do_sample=False,
                 return_full_text=False,
                 pad_token_id=self.tokenizer.eos_token_id
             )
@@ -199,12 +218,15 @@ class LLMOrchestrator:
             "content": self._create_system_content()
         })
         
-        # Add conversation history if provided
+        # Add conversation history if provided.
+        # Cap to the last 10 messages to prevent input-token bloat that
+        # slows down each successive request.
+        MAX_HISTORY = 10
         if conversation_history:
             # Filter out system messages from history (we handle system separately)
-            for msg in conversation_history:
-                if msg.get("role") != "system":
-                    conversation.append(msg)
+            filtered = [m for m in conversation_history if m.get("role") != "system"]
+            for msg in filtered[-MAX_HISTORY:]:
+                conversation.append(msg)
         
         # Add current user message
         conversation.append({
