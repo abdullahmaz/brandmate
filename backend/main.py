@@ -1,11 +1,19 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 import asyncio
 import threading
 from dotenv import load_dotenv
-from model_loader import get_llm, get_image_generator, get_text_generator, offload_image_generator, offload_text_generator, load_llm_at_startup
+from model_loader import (
+    get_llm,
+    get_image_generator,
+    get_text_generator,
+    get_website_generator,
+    offload_image_generator,
+    offload_text_generator,
+    load_llm_at_startup,
+)
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
@@ -43,6 +51,7 @@ class MessageRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     image: str | None = None
+    html: str | None = None
     tool: str | None = None
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
@@ -68,6 +77,7 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
         
         response_message = ""
         generated_image = None
+        response_html = None
         tool_used = None
         s3_url = None
         
@@ -137,9 +147,28 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                 response_message = f"I'll help you create a {video_type} video for: {description}. This feature is coming soon!"
                 
             elif tool_name == "website_generation":
-                brand_info = result["parameters"].get("brand_info", message)
-                page_type = result["parameters"].get("page_type", "landing")
-                response_message = f"I'll help you create a {page_type} page for: {brand_info}. This feature is coming soon!"
+                # One comprehensive prompt; website generator always produces a landing page.
+                params = result.get("parameters") or {}
+                prompt = params.get("prompt") or params.get("brand_info") or message
+
+                generator, gen_status = get_website_generator()
+                if gen_status == "loading":
+                    response_message = "The website generator is still loading. Please try again in a moment."
+                    tool_used = "loading"
+                elif (not generator) or gen_status != "ready" or not getattr(generator, "model_loaded", False):
+                    response_message = "Website generation service is currently unavailable."
+                else:
+                    try:
+                        response_html = await generator.generate(prompt=prompt)
+                    except Exception as gen_error:
+                        print(f"Website generation error: {gen_error}")
+                        response_html = None
+
+                    if response_html:
+                        response_message = "Here's your landing page."
+                    else:
+                        response_message = "I had trouble generating the landing page. Please try again with more brand details."
+                # WebsiteGenerator uses external inference (HTTP), so we keep it loaded.
                 
             else:
                 response_message = result["response"]
@@ -152,12 +181,16 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
         # Save assistant message
         try:
             message_type = storage_service.get_message_type_from_tool(tool_used) if tool_used != "conversation" else MessageType.TEXT
+            msg_metadata = None
+            if tool_used == "website_generation" and response_html:
+                msg_metadata = {"html": response_html}
             await database_service.create_message(MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content=response_message,
                 message_type=message_type,
-                s3_url=s3_url
+                s3_url=s3_url,
+                metadata=msg_metadata
             ))
         except Exception as db_error:
             print(f"Database error saving assistant message: {db_error}")
@@ -175,6 +208,7 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
         return ChatResponse(
             message=response_message,
             image=s3_url if s3_url else generated_image,
+            html=response_html,
             tool=tool_used,
             chat_id=chat_id,
             conversation_history=updated_conversation

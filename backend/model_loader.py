@@ -41,6 +41,11 @@ def _text_device() -> str:
     return _device_from_env("TEXT", default_cuda=False)
 
 
+def _website_device() -> str:
+    # Website generator (WEBGEN-4B): default GPU when available
+    return _device_from_env("WEBSITE", default_cuda=True)
+
+
 class _LazyHolder:
     def __init__(self, name: str, loader_fn):
         self.name = name
@@ -109,9 +114,16 @@ def _load_text_generator():
     return TextGenerator(device=device)
 
 
+def _load_website_generator():
+    from website_generator import WebsiteGenerator
+    device = _website_device()
+    return WebsiteGenerator(device=device)
+
+
 _llm_holder = _LazyHolder("LLM", _load_llm)
 _image_holder = _LazyHolder("ImageGenerator", _load_image_generator)
 _text_holder = _LazyHolder("TextGenerator", _load_text_generator)
+_website_holder = _LazyHolder("WebsiteGenerator", _load_website_generator)
 
 
 def get_llm() -> Tuple[Optional[Any], str]:
@@ -129,6 +141,11 @@ def get_text_generator() -> Tuple[Optional[Any], str]:
     return _text_holder.get()
 
 
+def get_website_generator() -> Tuple[Optional[Any], str]:
+    """Return (website_generator_or_none, status). status is 'ready' | 'loading' | 'failed'."""
+    return _website_holder.get()
+
+
 def get_model_status() -> dict:
     """Return current status of all models for diagnostics."""
     with _llm_holder._lock:
@@ -137,7 +154,9 @@ def get_model_status() -> dict:
         img_s = _image_holder.status
     with _text_holder._lock:
         txt_s = _text_holder.status
-    return {"llm": llm_s, "image": img_s, "text": txt_s}
+    with _website_holder._lock:
+        web_s = _website_holder.status
+    return {"llm": llm_s, "image": img_s, "text": txt_s, "website": web_s}
 
 
 def offload_image_generator() -> None:
