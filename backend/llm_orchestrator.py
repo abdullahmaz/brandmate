@@ -3,6 +3,8 @@ from typing import Dict, Any, List, Optional
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
 
+from json_repair import repair_json
+
 class LLMOrchestrator:
     def __init__(self, device: Optional[str] = None):
         # Use Llama 3.2 3B Instruct for fast loading and good tool calling
@@ -135,10 +137,11 @@ class LLMOrchestrator:
             full_prompt = self._conversation_to_llama_format(conversation)
             
             # Use the pipeline for generation with tool calling
+            # Low temperature (0.1-0.3) improves reliable JSON/tool-call format; high temp causes malformed brackets
             response = self.pipe(
                 full_prompt,
                 max_new_tokens=2048,
-                temperature=0.7,
+                temperature=0.2,
                 do_sample=True,
                 return_full_text=False,
                 pad_token_id=self.tokenizer.eos_token_id
@@ -259,8 +262,20 @@ class LLMOrchestrator:
         For general conversation, just respond normally. Always call tools directly without explanations.
 
         """
-    
-    
+
+    def _parse_tool_json(self, tool_json: str) -> Optional[Dict[str, Any]]:
+        """Parse tool JSON; on failure try json_repair for malformed output (missing brackets, trailing commas, etc.)."""
+        try:
+            return json.loads(tool_json)
+        except json.JSONDecodeError:
+            if repair_json:
+                try:
+                    repaired = repair_json(tool_json)
+                    return json.loads(repaired)
+                except (json.JSONDecodeError, Exception) as e:
+                    print(f"json_repair failed: {e}")
+            return None
+
     def _extract_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
         """
         Extract tool call from LLM response
@@ -274,12 +289,12 @@ class LLMOrchestrator:
                     tool_json = response[start:].strip()
                 else:
                     tool_json = response[start:end].strip()
-                
-                tool_call = json.loads(tool_json)
-                available_tools = [tool["name"] for tool in self.tools]
-                if tool_call.get("name") in available_tools:
-                    return tool_call
-            except (json.JSONDecodeError, KeyError) as e:
+                tool_call = self._parse_tool_json(tool_json)
+                if tool_call:
+                    available_tools = [tool["name"] for tool in self.tools]
+                    if tool_call.get("name") in available_tools:
+                        return tool_call
+            except (KeyError, TypeError) as e:
                 print(f"Error parsing tool_call: {e}")
         
         # Check for new format: <image_generation>, <text_generation>, etc.
@@ -289,20 +304,31 @@ class LLMOrchestrator:
             if tag in response:
                 try:
                     start = response.find(tag) + len(tag)
-                    tool_json = response[start:].strip()
-                    
-                    if '\n' in tool_json:
-                        tool_json = tool_json.split('\n')[0]
-                    
-                    tool_call = json.loads(tool_json)
-                    tool_name = tag[1:-1]
-                    tool_call["name"] = tool_name
-                    
-                    available_tools = [tool["name"] for tool in self.tools]
-                    if tool_name in available_tools:
-                        return tool_call
-                        
-                except (json.JSONDecodeError, KeyError) as e:
+                    raw = response[start:].strip()
+                    # Extract JSON: from first '{' take balanced braces (handles multi-line); if truncated, repair_json can fix
+                    first_brace = raw.find('{')
+                    if first_brace >= 0:
+                        depth = 0
+                        for i, c in enumerate(raw[first_brace:], start=first_brace):
+                            if c == '{':
+                                depth += 1
+                            elif c == '}':
+                                depth -= 1
+                                if depth == 0:
+                                    tool_json = raw[first_brace : i + 1]
+                                    break
+                        else:
+                            tool_json = raw[first_brace:]  # truncated, no matching close
+                    else:
+                        tool_json = raw
+                    tool_call = self._parse_tool_json(tool_json)
+                    if tool_call:
+                        tool_name = tag[1:-1]
+                        tool_call["name"] = tool_name
+                        available_tools = [tool["name"] for tool in self.tools]
+                        if tool_name in available_tools:
+                            return tool_call
+                except (KeyError, TypeError) as e:
                     print(f"Error parsing {tag}: {e}")
                     continue
         
