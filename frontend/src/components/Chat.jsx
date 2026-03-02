@@ -7,6 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useChat, useCreateChat } from "../hooks/useChat";
 import { api } from "../services/api";
 import { queryKeys } from "../types/api";
+import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
 import { Button } from "./ui/button";
 import { PlusIcon, Search } from "lucide-react";
 
@@ -57,7 +58,7 @@ const Chat = () => {
         role: "assistant",
         content:
           "Sorry, there was an error processing your request. Please try again.",
-        message_type: "text",
+        message_type: MESSAGE_TYPE_TEXT,
         timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
       };
 
@@ -79,9 +80,9 @@ const Chat = () => {
           message_type: msg.message_type,
           s3_url: msg.s3_url,
           metadata: msg.metadata,
-          tool: msg.message_type !== "text" ? msg.message_type : null,
+          tool: msg.message_type !== MESSAGE_TYPE_TEXT ? msg.message_type : null,
           image: msg.s3_url || null,
-          html: msg.message_type === "website" ? (msg.metadata?.html ?? null) : null,
+          html: msg.message_type === MESSAGE_TYPE_WEBSITE ? (msg.metadata?.html ?? null) : null,
           timestamp: formatDistanceToNow(new Date(msg.created_at), {
             addSuffix: true,
           }),
@@ -126,7 +127,7 @@ const Chat = () => {
           id: `user-${Date.now()}`,
           role: "user",
           content: message,
-          message_type: "text",
+          message_type: MESSAGE_TYPE_TEXT,
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
@@ -151,7 +152,7 @@ const Chat = () => {
           role: "assistant",
           content:
             "Sorry, there was an error creating a new chat. Please try again.",
-          message_type: "text",
+          message_type: MESSAGE_TYPE_TEXT,
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
@@ -165,7 +166,7 @@ const Chat = () => {
           id: `user-${Date.now()}`,
           role: "user",
           content: message,
-          message_type: "text",
+          message_type: MESSAGE_TYPE_TEXT,
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
@@ -193,7 +194,7 @@ const Chat = () => {
           role: "assistant",
           content:
             "Sorry, there was an error processing your request. Please try again.",
-          message_type: "text",
+          message_type: MESSAGE_TYPE_TEXT,
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
