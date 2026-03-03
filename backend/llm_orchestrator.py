@@ -140,6 +140,25 @@ class LLMOrchestrator:
                     },
                     "required": ["brand_info"]
                 }
+            },
+            {
+                "name": "billboard_search",
+                "description": "Search for real physical billboard and OOH (Out-of-Home) advertising spaces in Pakistani cities. Use this when users want to physically market their brand outdoors, find billboard locations, check advertising prices, or look for digital/static/pole signs in a specific city.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "city": {
+                            "type": "string",
+                            "description": "The Pakistani city to search billboards in (e.g. Lahore, Karachi, Islamabad, Rawalpindi)"
+                        },
+                        "ad_type": {
+                            "type": "string",
+                            "description": "Type of OOH media: billboard, digital, pole, airport, bridge, bus shelter, smd, vehicle branding, wall panels. Default is billboard.",
+                            "default": "billboard"
+                        }
+                    },
+                    "required": ["city"]
+                }
             }
         ]
     
@@ -285,6 +304,16 @@ class LLMOrchestrator:
         <website_generation>
         {"parameters": {"brand_info": "brand details", "page_type": "landing"}}
 
+        When users want to physically market their brand, find billboards, outdoor advertising, OOH media, digital signs, pole signs, or any physical advertising space in a Pakistani city, use:
+        <billboard_search>
+        {"parameters": {"city": "city name", "ad_type": "billboard"}}
+
+        Examples that should trigger billboard_search:
+        - "I want to physically market my brand in Lahore" → city=Lahore, ad_type=billboard
+        - "Find digital billboards in Karachi" → city=Karachi, ad_type=digital
+        - "Show me pole signs in Islamabad" → city=Islamabad, ad_type=pole
+        - "Outdoor advertising in Rawalpindi" → city=Rawalpindi, ad_type=billboard
+
         For general conversation, just respond normally. Always call tools directly without explanations.
 
         """
@@ -312,7 +341,7 @@ class LLMOrchestrator:
                 print(f"Error parsing tool_call: {e}")
         
         # Check for new format: <image_generation>, <text_generation>, etc.
-        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>", "<billboard_search>"]
         
         for tag in tool_tags:
             if tag in response:
@@ -344,7 +373,7 @@ class LLMOrchestrator:
         import re
         
         # Remove tool-specific tags and their content
-        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>", "<billboard_search>"]
         cleaned = response
         
         for tag in tool_tags:

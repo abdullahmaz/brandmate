@@ -9,6 +9,7 @@ from model_loader import get_llm, get_image_generator, get_text_generator, offlo
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
+from billboard_scraper import scrape_billboards, format_billboard_results
 
 load_dotenv()
 
@@ -135,6 +136,25 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                 else:
                     response_message = f"Text generation service is currently unavailable."
                 
+            elif tool_name == "billboard_search":
+                city = result["parameters"].get("city", "")
+                ad_type = result["parameters"].get("ad_type", "billboard")
+                if not city:
+                    response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad)."
+                else:
+                    try:
+                        print(f"DEBUG: Scraping billboards — city={city}, ad_type={ad_type}")
+                        scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
+                        response_message = format_billboard_results(scrape_data)
+                        print(f"DEBUG: Billboard scrape complete — {len(scrape_data.get('results', []))} results")
+                    except Exception as scrape_err:
+                        print(f"Billboard scrape error: {scrape_err}")
+                        response_message = (
+                            f"I tried to search for {ad_type} advertising spaces in {city} on adbuq.com, "
+                            f"but encountered an issue: {scrape_err}. "
+                            f"You can search directly at https://www.adbuq.com/"
+                        )
+
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
