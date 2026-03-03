@@ -477,3 +477,227 @@ def format_billboard_results(data: Dict[str, Any]) -> str:
     lines.append(f"*Contact adbuq.com: +92 328 020 111 3 | support@adbuq.com*")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Detail-page scraper
+# ---------------------------------------------------------------------------
+
+def scrape_billboard_detail(detail_url: str) -> Dict[str, Any]:
+    """
+    Fetch and parse a single adbuq.com billboard detail page.
+
+    Extracts:
+      - title           : page <h1> inside div.page-title
+      - images          : all gallery images (houzez-gallery-img)
+      - description     : plain-text traffic / description block
+      - details         : dict of the "Details" section fields
+                          (OOH Media ID, Size, Contact, Zone, Availability date)
+      - address         : dict with Address, City, State/Province, Country
+      - google_maps_url : direct Google Maps link from the "Open on Google Maps" button
+      - latitude        : from the embedded map data-map JSON attribute
+      - longitude       : from the embedded map data-map JSON attribute
+      - detail_url      : the URL that was scraped
+      - error           : present only if something went wrong
+
+    Parameters
+    ----------
+    detail_url : str
+        Full URL of the billboard detail page, e.g.
+        https://www.adbuq.com/billboards/billboard-at-hazara-motorway-islamabad/
+    """
+    result: Dict[str, Any] = {"detail_url": detail_url}
+
+    try:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        resp = session.get(detail_url, timeout=15)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        result["error"] = str(e)
+        return result
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # ── Title ────────────────────────────────────────────────────────────
+    # <div class="page-title me-4"><h1>Billboard At …</h1></div>
+    page_title_div = soup.find("div", class_=re.compile(r"page-title", re.I))
+    if page_title_div:
+        h1 = page_title_div.find("h1")
+        result["title"] = h1.get_text(strip=True) if h1 else page_title_div.get_text(strip=True)
+    else:
+        h1 = soup.find("h1")
+        result["title"] = h1.get_text(strip=True) if h1 else ""
+
+    # ── Gallery Images ───────────────────────────────────────────────────
+    # <img class="houzez-gallery-img …" data-lazy="…" src="…">
+    gallery_imgs = soup.find_all("img", class_=re.compile(r"houzez-gallery-img", re.I))
+    images = []
+    seen_imgs: set = set()
+    for img in gallery_imgs:
+        url = img.get("data-lazy") or img.get("src") or ""
+        if url and "svg" not in url and "data:image" not in url and url not in seen_imgs:
+            seen_imgs.add(url)
+            images.append(url)
+    result["images"] = images
+
+    # ── Description ──────────────────────────────────────────────────────
+    # <div class="property-description-wrap …"><div class="description-content"><p>…
+    desc_wrap = soup.find("div", class_=re.compile(r"property-description-wrap", re.I))
+    if desc_wrap:
+        desc_content = desc_wrap.find("div", class_=re.compile(r"description-content", re.I))
+        target = desc_content if desc_content else desc_wrap
+        # Extract clean text, preserving line breaks around <br> / <p>
+        for br in target.find_all("br"):
+            br.replace_with("\n")
+        raw = target.get_text(separator="\n", strip=True)
+        # Collapse excessive blank lines
+        description = re.sub(r"\n{3,}", "\n\n", raw).strip()
+        result["description"] = description if description else ""
+    else:
+        result["description"] = ""
+
+    # ── Details section ──────────────────────────────────────────────────
+    # <div class="property-detail-wrap …">
+    #   <ul class="list-lined"><li><strong>OOH Media ID</strong><span>71689</span>
+    details: Dict[str, str] = {}
+    detail_wrap = soup.find("div", class_=re.compile(r"property-detail-wrap", re.I))
+    if detail_wrap:
+        for li in detail_wrap.find_all("li"):
+            strong = li.find("strong")
+            span = li.find("span")
+            if strong and span:
+                key = strong.get_text(strip=True).rstrip(":")
+                # Use the anchor text if present (e.g. "login to view date"), else span text
+                a_tag = span.find("a")
+                val = a_tag.get_text(strip=True) if a_tag else span.get_text(strip=True)
+                # Strip internal JS placeholder tokens
+                if val and "PLACEHOLDER" not in val and val:
+                    details[key] = val
+                elif a_tag:
+                    details[key] = a_tag.get_text(strip=True)
+    result["details"] = details
+
+    # Convenience shortcuts from details
+    result["ooh_media_id"] = details.get("OOH Media ID", "")
+    result["size"] = details.get("Size", "")
+    result["contact"] = details.get("Contact", "")
+    result["zone"] = details.get("Zone", "")
+    result["availability_date"] = details.get("Availability date", "")
+
+    # ── Address section ──────────────────────────────────────────────────
+    # <div class="property-address-wrap …">
+    #   <ul><li><strong>Address:</strong><span>…</span>
+    address: Dict[str, str] = {}
+    addr_wrap = soup.find("div", class_=re.compile(r"property-address-wrap", re.I))
+    if addr_wrap:
+        for li in addr_wrap.find_all("li"):
+            strong = li.find("strong")
+            span = li.find("span")
+            if strong and span:
+                key = strong.get_text(strip=True).rstrip(":")
+                val = span.get_text(strip=True)
+                if key and val:
+                    address[key] = val
+
+        # Google Maps button: <a class="hz-btn-map" href="https://maps.google.com/…">
+        maps_btn = addr_wrap.find("a", class_=re.compile(r"hz-btn-map", re.I))
+        result["google_maps_url"] = maps_btn.get("href", "") if maps_btn else ""
+
+        # Lat / lng / price from data-map JSON on the map div
+        map_div = addr_wrap.find(attrs={"data-map": True})
+        if map_div:
+            try:
+                import json
+                map_data = json.loads(map_div["data-map"])
+                result["latitude"] = map_data.get("latitude", "")
+                result["longitude"] = map_data.get("longitude", "")
+                result["price"] = map_data.get("pricePin", "")
+            except (json.JSONDecodeError, KeyError):
+                result["latitude"] = ""
+                result["longitude"] = ""
+                result["price"] = ""
+        else:
+            result["latitude"] = ""
+            result["longitude"] = ""
+            result.setdefault("price", "")
+
+    # Price: primary source is pricePin in data-map JSON (already set above).
+    # Fallback: <li class="item-price …"><span class="price">Rs …</span>
+    if not result.get("price"):
+        price_li = soup.find("li", class_=re.compile(r"item-price", re.I))
+        if price_li:
+            price_span = price_li.find("span", class_="price")
+            result["price"] = price_span.get_text(strip=True) if price_span else ""
+        else:
+            price_span = soup.find("span", class_="price")
+            result["price"] = price_span.get_text(strip=True) if price_span else ""
+
+    result["address"] = address
+
+    result["source"] = "adbuq.com"
+    result["source_url"] = "https://www.adbuq.com"
+    return result
+
+
+def format_billboard_detail(data: Dict[str, Any]) -> str:
+    """
+    Format a scraped billboard detail page into a readable markdown string
+    suitable for returning to the user as a chat response.
+    """
+    if data.get("error") and not data.get("title"):
+        return (
+            f"Could not fetch billboard details.\n"
+            f"Error: {data['error']}\n"
+            f"Try opening directly: {data.get('detail_url', '')}"
+        )
+
+    lines = []
+
+    title = data.get("title", "Billboard Details")
+    lines.append(f"## {title}")
+    lines.append(f"*Source: [adbuq.com]({data.get('detail_url', '')})*\n")
+
+    if data.get("price"):
+        lines.append(f"**Price:** {data['price']}")
+
+    # Key details
+    details = data.get("details", {})
+    if details:
+        lines.append("\n### Details")
+        field_order = ["OOH Media ID", "Size", "Zone", "Contact", "Availability date"]
+        shown = set()
+        for field in field_order:
+            if field in details:
+                lines.append(f"- **{field}:** {details[field]}")
+                shown.add(field)
+        # Any remaining fields not in the ordered list
+        for k, v in details.items():
+            if k not in shown:
+                lines.append(f"- **{k}:** {v}")
+
+    # Address
+    address = data.get("address", {})
+    if address:
+        lines.append("\n### Address")
+        for k, v in address.items():
+            lines.append(f"- **{k}:** {v}")
+    if data.get("google_maps_url"):
+        lines.append(f"- [Open on Google Maps]({data['google_maps_url']})")
+    lat, lng = data.get("latitude", ""), data.get("longitude", "")
+    if lat and lng:
+        lines.append(f"- **Coordinates:** {lat}, {lng}")
+
+    # Description
+    if data.get("description"):
+        lines.append("\n### Description")
+        lines.append(data["description"])
+
+    # Images
+    images = data.get("images", [])
+    if images:
+        lines.append(f"\n### Images ({len(images)})")
+        for i, img_url in enumerate(images, 1):
+            lines.append(f"{i}. {img_url}")
+
+    return "\n".join(lines)
