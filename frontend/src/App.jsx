@@ -4,6 +4,7 @@ import { ChatSidebar } from './components/ChatSidebar';
 import Chat from './components/Chat';
 import { ThemeProvider } from './components/ThemeProvider';
 import { QueryProvider } from './providers/QueryProvider';
+import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
               </div>
             </div>
           </div>
+          <Toaster />
         </Router>
       </ThemeProvider>
     </QueryProvider>

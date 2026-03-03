@@ -5,6 +5,8 @@ requests
 beautifulsoup4
 transformers
 torch
+huggingface_hub
+gguf
 torchvision
 diffusers
 pillow
@@ -18,3 +20,4 @@ nvidia-ml-py3
 supabase
 boto3
 peft
+json-repair

@@ -39,6 +39,7 @@ export function ChatArea({ messages, isLoading }) {
             content={message.content}
             timestamp={message.timestamp}
             image={message.image}
+            html={message.html}
             tool={message.tool}
           />
         ))}
@@ -50,7 +51,7 @@ export function ChatArea({ messages, isLoading }) {
             </div>
             <div className="flex-1">
               <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
                   Assistant
                   <span className="text-xs text-muted-foreground">is thinking</span>
                   <Spinner variant="ellipsis" size={16} className="text-primary" />
