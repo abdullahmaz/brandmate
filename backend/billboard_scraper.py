@@ -411,10 +411,16 @@ def scrape_billboards(
     }
 
 
-def format_billboard_results(data: Dict[str, Any]) -> str:
+def format_billboard_results(data: Dict[str, Any], top_n: int = 5) -> str:
     """
     Format scraped billboard data into a readable markdown-style string
     suitable for returning to the user as a chat response.
+
+    Parameters
+    ----------
+    data  : dict returned by scrape_billboards()
+    top_n : maximum number of listings to show inline (default 5).
+            Any remaining results are linked to adbuq.com.
     """
     results = data.get("results", [])
     city = data.get("city", "").replace("-", " ").title()
@@ -435,7 +441,8 @@ def format_billboard_results(data: Dict[str, Any]) -> str:
         header += f" ({ad_type})"
     if total is not None:
         header += f"\n**{total} total listings found** on adbuq.com"
-    header += f"\n*Showing {len(results)} results | [View all on adbuq.com]({search_url})*\n"
+    shown_count = min(len(results), top_n)
+    header += f"\n*Showing top {shown_count} results | [View all on adbuq.com]({search_url})*\n"
 
     if not results:
         return (
@@ -443,8 +450,14 @@ def format_billboard_results(data: Dict[str, Any]) -> str:
             "Try a different city or media type, or browse directly at adbuq.com."
         )
 
+    # Only show the top N results inline
+    display_results = results[:top_n]
+    remaining = len(results) - len(display_results)
+    # If total_found is known and larger, use that for the redirect label
+    total_remaining = (total - len(display_results)) if (total and total > len(display_results)) else remaining
+
     lines = [header]
-    for i, r in enumerate(results, 1):
+    for i, r in enumerate(display_results, 1):
         title = r.get("title", "Unnamed Billboard")
         price = r.get("price", "Contact for price")
         city_r = r.get("city", city)
@@ -473,7 +486,18 @@ def format_billboard_results(data: Dict[str, Any]) -> str:
         if url:
             lines.append(f"- 🔗 [View Details]({url})")
 
-    lines.append(f"\n---\n*Data sourced from [adbuq.com]({search_url}) — Pakistan's OOH media marketplace.*")
+    # Redirect block for remaining listings
+    lines.append("\n---")
+    if total_remaining and total_remaining > 0:
+        lines.append(
+            f"### 🔎 {total_remaining:,} more listing(s) available"
+        )
+        lines.append(
+            f"Browse all results directly on adbuq.com — Pakistan's largest OOH media marketplace:\n"
+            f"👉 **[View all {city} listings on adbuq.com]({search_url})**"
+        )
+    else:
+        lines.append(f"*Data sourced from [adbuq.com]({search_url}) — Pakistan's OOH media marketplace.*")
     lines.append(f"*Contact adbuq.com: +92 328 020 111 3 | support@adbuq.com*")
 
     return "\n".join(lines)

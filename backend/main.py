@@ -155,7 +155,7 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                     try:
                         print(f"DEBUG: Scraping billboards — city={city}, ad_type={ad_type}")
                         scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
-                        response_message = format_billboard_results(scrape_data)
+                        response_message = format_billboard_results(scrape_data, top_n=5)
                         print(f"DEBUG: Billboard scrape complete — {len(scrape_data.get('results', []))} results")
                     except Exception as scrape_err:
                         print(f"Billboard scrape error: {scrape_err}")
