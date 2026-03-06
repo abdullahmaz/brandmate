@@ -20,11 +20,8 @@ from model_loader import (
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
-<<<<<<< HEAD
 from video_generator import VideoGenerator  # ← new import
-=======
 from billboard_scraper import scrape_billboards, format_billboard_results, enrich_with_contact
->>>>>>> 94089f4f04705600cd06fd9bec1b14a04529437e
 
 load_dotenv()
 
