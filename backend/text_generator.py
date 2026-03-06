@@ -1,5 +1,5 @@
 """
-Text Generator using Fine-tuned Qwen2.5-0.5B-Instruct with LoRA
+Text Generator using Fine-tuned Qwen2.5-1.5B-Instruct with LoRA
 Specializes in generating marketing content for Eastern clothing brands
 
 Performance Notes:
@@ -18,10 +18,10 @@ from typing import Optional
 
 class TextGenerator:
     def __init__(self, device: Optional[str] = None):
-        base_model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+        base_model_name = "Qwen/Qwen2.5-1.5B-Instruct"
         use_cuda = (device == "cuda") if device is not None else torch.cuda.is_available()
         
-        print(f"Loading Fine Tuned Qwen2.5-0.5B-Instruct model (device={'cuda' if use_cuda else 'cpu'})")
+        print(f"Loading Fine Tuned Qwen2.5-1.5B-Instruct model (device={'cuda' if use_cuda else 'cpu'})")
         print(f"Base model: {base_model_name}")
         
         try:

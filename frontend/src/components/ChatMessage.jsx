@@ -1,8 +1,53 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import ReactMarkdown from 'react-markdown';
 import { HoverActions } from './HoverActions';
 import { CONTENT_TYPE_TEXT, CONTENT_TYPE_IMAGE, CONTENT_TYPE_WEBSITE, TOOL_CONVERSATION } from '../constants/toolTypes';
+
+function BillboardImage({ src, alt }) {
+  const [status, setStatus] = useState('loading');
+  return (
+    <div className="not-prose mt-2 mb-1 rounded-xl border border-border/60 overflow-hidden bg-muted/30 shadow-sm w-full max-w-sm">
+      {status === 'loading' && (
+        <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+          Loading image…
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">
+          Image unavailable
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-[240px] object-cover block ${status !== 'loaded' ? 'hidden' : ''}`}
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+      />
+    </div>
+  );
+}
+
+// Splits content on ![]() tokens and returns array of {type:'text'|'image', value/src/alt}
+function splitContentByImages(content) {
+  if (!content) return [{ type: 'text', value: content }];
+  const parts = [];
+  const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = imgRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'image', alt: match[1], src: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    parts.push({ type: 'text', value: content.slice(lastIndex) });
+  }
+  return parts;
+}
 
 /**
  * Component for rendering a single chat message
@@ -14,6 +59,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
     html ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="#"]');if(a){e.preventDefault();var el=document.querySelector(a.getAttribute('href'));if(el)el.scrollIntoView({behavior:'smooth'});}});<\/script>` : null,
     [html]
   );
+  const contentParts = useMemo(() => splitContentByImages(content), [content]);
 
   return (
     <div className="flex gap-4 px-4 py-5">
@@ -36,7 +82,11 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
         >
           <HoverActions type={CONTENT_TYPE_TEXT} copyContent={content} enabled={!isUser}>
             <div className="prose prose-sm max-w-none break-words leading-6 text-foreground dark:prose-invert">
-              <ReactMarkdown>{content}</ReactMarkdown>
+              {contentParts.map((part, i) =>
+                part.type === 'image'
+                  ? <BillboardImage key={i} src={part.src} alt={part.alt} />
+                  : <ReactMarkdown key={i}>{part.value}</ReactMarkdown>
+              )}
             </div>
           </HoverActions>
 

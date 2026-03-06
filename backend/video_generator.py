@@ -5,12 +5,14 @@ import json
 import os
 import random
 import time
+import websocket  # pip install websocket-client
 from pathlib import Path
 from typing import Optional
 
 import httpx
 
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_CLIENT_ID = "brandmate_comfyui_session"  # fixed so ComfyUI keeps models loaded
 WORKFLOWS_DIR = Path(__file__).parent / "workflows"
 
 # ── Node IDs (from exported workflow JSONs) ────────────────────────────────
@@ -59,7 +61,7 @@ class VideoGenerator:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{self.comfyui_url}/prompt",
-                json={"prompt": workflow},
+                json={"prompt": workflow, "client_id": COMFYUI_CLIENT_ID},
             )
             response.raise_for_status()
             prompt_id = response.json()["prompt_id"]
@@ -70,31 +72,63 @@ class VideoGenerator:
         self, prompt_id: str, timeout: int = 600
     ) -> Optional[str]:
         """
-        Poll /history/{prompt_id} every 3 s until the job finishes.
-        Returns the output filename (WEBP), or None on timeout.
+        Wait for ComfyUI completion via WebSocket (same approach as working streamlit app).
+        Then look up filename from /history targeting node 28 (SaveAnimatedWEBP) directly.
         """
-        deadline = time.time() + timeout
-        async with httpx.AsyncClient(timeout=10) as client:
-            while time.time() < deadline:
-                await asyncio.sleep(3)
-                try:
-                    resp = await client.get(
-                        f"{self.comfyui_url}/history/{prompt_id}"
-                    )
-                    history = resp.json()
-                    if prompt_id in history:
-                        outputs = history[prompt_id].get("outputs", {})
-                        for node_output in outputs.values():
-                            # SaveAnimatedWEBP stores results under "animated"
-                            # Regular SaveImage uses "images" — check both
-                            for key in ("animated", "images"):
-                                if key in node_output and node_output[key]:
-                                    filename = node_output[key][0]["filename"]
-                                    print(f"DEBUG: Output file ready: {filename}")
-                                    return filename
-                except Exception as e:
-                    print(f"DEBUG: Polling error (will retry): {e}")
-        print("DEBUG: Video generation timed out")
+        comfy_addr = self.comfyui_url.replace("http://", "").replace("https://", "")
+        ws_url = f"ws://{comfy_addr}/ws?clientId={COMFYUI_CLIENT_ID}"
+
+        def _listen_ws():
+            """Blocking WS listener — runs in thread pool to avoid blocking event loop."""
+            ws = websocket.WebSocket()
+            ws.settimeout(timeout)
+            ws.connect(ws_url)
+            print(f"DEBUG: WebSocket connected, waiting for prompt_id={prompt_id}")
+            while True:
+                out = ws.recv()
+                if isinstance(out, str):
+                    message = json.loads(out)
+                    if (
+                        message.get("type") == "executing"
+                        and message["data"].get("node") is None
+                        and message["data"].get("prompt_id") == prompt_id
+                    ):
+                        print("DEBUG: ComfyUI generation complete!")
+                        ws.close()
+                        return True
+            return False
+
+        # Run blocking WS in thread pool so we don't block FastAPI event loop
+        loop = asyncio.get_event_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(None, _listen_ws),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            print("DEBUG: WebSocket wait timed out")
+            return None
+
+        # Small buffer for file writing (same as working app)
+        await asyncio.sleep(2)
+
+        # Look up filename from history — target node 28 (SaveAnimatedWEBP) directly
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{self.comfyui_url}/history/{prompt_id}")
+                history_response = resp.json()
+                if prompt_id in history_response:
+                    outputs = history_response[prompt_id].get("outputs", {})
+                    node_output = outputs.get("28", {})
+                    print(f"DEBUG: Node 28 output: {node_output}")
+                    for key in ("gifs", "images", "animated", "webp"):
+                        if key in node_output and isinstance(node_output[key], list):
+                            filename = node_output[key][0]["filename"]
+                            print(f"DEBUG: Output file ready: {filename}")
+                            return filename
+        except Exception as e:
+            print(f"DEBUG: History lookup failed: {e}")
+
         return None
 
     async def _fetch_as_base64(self, filename: str) -> str:
