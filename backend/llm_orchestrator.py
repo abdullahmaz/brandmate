@@ -16,23 +16,40 @@ class LLMOrchestrator:
             # Load tokenizer first
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             
-            # Load model with appropriate settings for 3B model
+            # Load model with appropriate settings for 3B model.
+            # Try Flash Attention 2 first (Ampere+ GPU); fall back silently if unavailable.
+            extra_kwargs = {}
+            if use_cuda:
+                try:
+                    import flash_attn  # noqa: F401
+                    extra_kwargs["attn_implementation"] = "flash_attention_2"
+                    print("[LLM] Flash Attention 2 enabled.")
+                except ImportError:
+                    pass
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16 if use_cuda else torch.float32,
                 device_map="auto" if use_cuda else None,
                 use_safetensors=True,
+                **extra_kwargs,
             )
             if not use_cuda and self.model is not None:
                 self.model = self.model.to("cpu")
             
-            # Create pipeline for easier text generation
-            self.pipe = pipeline(
-                "text-generation",
+            # Create pipeline for easier text generation.
+            # device must be set explicitly — without it, transformers auto-detects
+            # CUDA and silently moves the model to GPU even when we loaded it on CPU.
+            pipe_kwargs = dict(
                 model=self.model,
                 tokenizer=self.tokenizer,
-                torch_dtype=torch.float16 if use_cuda else torch.float32,
+                dtype=torch.float16 if use_cuda else torch.float32,
             )
+            if use_cuda:
+                pipe_kwargs["device_map"] = "auto"
+            else:
+                pipe_kwargs["device"] = "cpu"
+            self.pipe = pipeline("text-generation", **pipe_kwargs)
             
             print("Llama 3.2 3B Instruct loaded successfully!")
             self.model_loaded = True
@@ -118,6 +135,25 @@ class LLMOrchestrator:
                     },
                     "required": ["prompt"]
                 }
+            },
+            {
+                "name": "billboard_search",
+                "description": "Search for real physical billboard and OOH (Out-of-Home) advertising spaces in Pakistani cities. Use this when users want to physically market their brand outdoors, find billboard locations, check advertising prices, or look for digital/static/pole signs in a specific city.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "city": {
+                            "type": "string",
+                            "description": "The Pakistani city to search billboards in (e.g. Lahore, Karachi, Islamabad, Rawalpindi)"
+                        },
+                        "ad_type": {
+                            "type": "string",
+                            "description": "Type of OOH media: billboard, digital, pole, airport, bridge, bus shelter, smd, vehicle branding, wall panels. Default is billboard.",
+                            "default": "billboard"
+                        }
+                    },
+                    "required": ["city"]
+                }
             }
         ]
     
@@ -195,12 +231,15 @@ class LLMOrchestrator:
             "content": self._create_system_content()
         })
         
-        # Add conversation history if provided
+        # Add conversation history if provided.
+        # Cap to the last 10 messages to prevent input-token bloat that
+        # slows down each successive request.
+        MAX_HISTORY = 10
         if conversation_history:
             # Filter out system messages from history (we handle system separately)
-            for msg in conversation_history:
-                if msg.get("role") != "system":
-                    conversation.append(msg)
+            filtered = [m for m in conversation_history if m.get("role") != "system"]
+            for msg in filtered[-MAX_HISTORY:]:
+                conversation.append(msg)
         
         # Add current user message
         conversation.append({
@@ -259,6 +298,16 @@ class LLMOrchestrator:
         <website_generation>
         {"parameters": {"prompt": "brand details + any requirements (landing page; assume missing details)"}}
 
+        When users want to physically market their brand, find billboards, outdoor advertising, OOH media, digital signs, pole signs, or any physical advertising space in a Pakistani city, use:
+        <billboard_search>
+        {"parameters": {"city": "city name", "ad_type": "billboard"}}
+
+        Examples that should trigger billboard_search:
+        - "I want to physically market my brand in Lahore" → city=Lahore, ad_type=billboard
+        - "Find digital billboards in Karachi" → city=Karachi, ad_type=digital
+        - "Show me pole signs in Islamabad" → city=Islamabad, ad_type=pole
+        - "Outdoor advertising in Rawalpindi" → city=Rawalpindi, ad_type=billboard
+
         For general conversation, just respond normally. Always call tools directly without explanations.
 
         """
@@ -298,7 +347,7 @@ class LLMOrchestrator:
                 print(f"Error parsing tool_call: {e}")
         
         # Check for new format: <image_generation>, <text_generation>, etc.
-        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>", "<billboard_search>"]
         
         for tag in tool_tags:
             if tag in response:
@@ -341,7 +390,7 @@ class LLMOrchestrator:
         import re
         
         # Remove tool-specific tags and their content
-        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>"]
+        tool_tags = ["<image_generation>", "<text_generation>", "<video_generation>", "<website_generation>", "<billboard_search>"]
         cleaned = response
         
         for tag in tool_tags:

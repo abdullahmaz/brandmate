@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 import asyncio
 import threading
+import urllib.parse
+import requests as req_lib
 from dotenv import load_dotenv
 from model_loader import (
     get_llm,
@@ -17,6 +20,7 @@ from model_loader import (
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
+from billboard_scraper import scrape_billboards, format_billboard_results, enrich_with_contact
 
 load_dotenv()
 
@@ -86,6 +90,9 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
             tool_used = tool_name
             
             if tool_name == "image_generation":
+                # Free text-model VRAM before loading image model (swap strategy).
+                # This keeps the image model warm for consecutive image requests.
+                offload_text_generator()
                 image_generator, img_status = get_image_generator()
                 if img_status == "loading":
                     response_message = "The image model is still loading. Please try again in a moment."
@@ -113,15 +120,17 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                             print(f"DEBUG: Using fallback base64 image")
                         
                         response_message = f"I've generated an image for your request: '{prompt}'. The image showcases Eastern clothing design elements as requested."
+                        # Image model stays loaded — no offload here.
                     except Exception as img_error:
                         print(f"Image generation error: {img_error}")
                         response_message = f"I tried to generate an image for '{prompt}', but encountered a technical issue. Here's some information instead: {result['response']}"
-                    finally:
-                        offload_image_generator()
                 else:
                     response_message = "Image generation service is currently unavailable."
                 
             elif tool_name == "text_generation":
+                # Free image-model VRAM before loading text model (swap strategy).
+                # This keeps the text model warm for consecutive text requests.
+                offload_image_generator()
                 prompt = result["parameters"].get("prompt", message)
                 text_generator, txt_status = get_text_generator()
                 if txt_status == "loading":
@@ -133,14 +142,33 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                             prompt=prompt,
                         )
                         response_message = generated_text
+                        # Text model stays loaded — no offload here.
                     except Exception as text_error:
                         print(f"Text generation error: {text_error}")
                         response_message = f"I tried to generate content based on your request, but encountered an issue."
-                    finally:
-                        offload_text_generator()
                 else:
                     response_message = f"Text generation service is currently unavailable."
                 
+            elif tool_name == "billboard_search":
+                city = result["parameters"].get("city", "")
+                ad_type = result["parameters"].get("ad_type", "billboard")
+                if not city:
+                    response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad)."
+                else:
+                    try:
+                        print(f"DEBUG: Scraping billboards — city={city}, ad_type={ad_type}")
+                        scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
+                        enrich_with_contact(scrape_data.get("results", []), top_n=5)
+                        response_message = format_billboard_results(scrape_data, top_n=5)
+                        print(f"DEBUG: Billboard scrape complete — {len(scrape_data.get('results', []))} results")
+                    except Exception as scrape_err:
+                        print(f"Billboard scrape error: {scrape_err}")
+                        response_message = (
+                            f"I tried to search for {ad_type} advertising spaces in {city} on adbuq.com, "
+                            f"but encountered an issue: {scrape_err}. "
+                            f"You can search directly at https://www.adbuq.com/"
+                        )
+
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
@@ -225,6 +253,29 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
 @app.get("/")
 async def root():
     return {"message": "Brandmate API is running!"}
+
+
+@app.get("/api/image-proxy")
+async def image_proxy(url: str = Query(...)):
+    """Proxy images from external sources (e.g. adbuq.com) to bypass hotlink protection."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    try:
+        resp = req_lib.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.adbuq.com/",
+            },
+            timeout=10,
+            stream=True,
+        )
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        return StreamingResponse(resp.iter_content(chunk_size=8192), media_type=content_type)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch image: {e}")
 
 
 @app.post("/api/chats", response_model=ChatResponse)
@@ -379,6 +430,9 @@ async def chat(request: ChatRequest):
                 except Exception as img_error:
                     print(f"Image generation error in fallback mode: {img_error}")
                 finally:
+                    # Delete the local reference BEFORE offloading so the GC can
+                    # immediately reclaim VRAM when offload() calls gc.collect().
+                    del image_generator
                     offload_image_generator()
             await database_service.create_message(MessageCreate(
                 chat_id=chat_id,

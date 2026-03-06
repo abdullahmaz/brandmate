@@ -15,30 +15,27 @@ STATUS_READY = "ready"
 STATUS_FAILED = "failed"
 
 
-def _device_from_env(name: str, default_cuda: bool) -> str:
-    """Get device from env MODEL_*_DEVICE. default_cuda: use cuda when available if not set."""
+def _device_from_env(name: str) -> str:
+    """Read device from MODEL_<NAME>_DEVICE env var. Falls back to 'cpu' if not set or invalid."""
     key = f"MODEL_{name}_DEVICE"
     val = os.getenv(key, "").strip().lower()
     if val in ("cuda", "cpu"):
         return val
-    try:
-        import torch
-        return "cuda" if (default_cuda and torch.cuda.is_available()) else "cpu"
-    except Exception:
-        return "cpu"
+    # Env var missing or invalid — warn and default to cpu so the server still starts.
+    print(f"[model_loader] WARNING: {key} not set or invalid (got '{val}'). Defaulting to 'cpu'.")
+    return "cpu"
 
 
 def _llm_device() -> str:
-    return _device_from_env("LLM", default_cuda=True)
+    return _device_from_env("LLM")
 
 
 def _image_device() -> str:
-    return _device_from_env("IMAGE", default_cuda=True)
+    return _device_from_env("IMAGE")
 
 
 def _text_device() -> str:
-    # Default Text to CPU when CUDA is available to save VRAM for LLM and Image
-    return _device_from_env("TEXT", default_cuda=False)
+    return _device_from_env("TEXT")
 
 
 def _website_device() -> str:
