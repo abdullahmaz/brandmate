@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 import asyncio
 import threading
+import urllib.parse
+import requests as req_lib
 from dotenv import load_dotenv
 from model_loader import (
     get_llm,
@@ -250,6 +253,29 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
 @app.get("/")
 async def root():
     return {"message": "Brandmate API is running!"}
+
+
+@app.get("/api/image-proxy")
+async def image_proxy(url: str = Query(...)):
+    """Proxy images from external sources (e.g. adbuq.com) to bypass hotlink protection."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    try:
+        resp = req_lib.get(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.adbuq.com/",
+            },
+            timeout=10,
+            stream=True,
+        )
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        return StreamingResponse(resp.iter_content(chunk_size=8192), media_type=content_type)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch image: {e}")
 
 
 @app.post("/api/chats", response_model=ChatResponse)

@@ -513,7 +513,8 @@ def format_billboard_results(data: Dict[str, Any], top_n: int = 5) -> str:
         if contact:
             lines.append(f"- 📞 **Contact:** {contact}")
         if img:
-            lines.append(f"- 🖼️ **Image:** {img}")
+            proxy_img = f"http://localhost:8000/api/image-proxy?url={img}"
+            lines.append(f"\n![{title}]({proxy_img})")
         if url:
             lines.append(f"- 🔗 [View Details]({url})")
 
