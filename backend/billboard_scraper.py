@@ -411,6 +411,38 @@ def scrape_billboards(
     }
 
 
+def enrich_with_contact(results: List[Dict[str, Any]], top_n: int = 5) -> None:
+    """
+    Fetch detail pages for the first *top_n* results and inject the
+    ``contact`` field in-place.  Results beyond *top_n* are left unchanged.
+    """
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    for r in results[:top_n]:
+        url = r.get("detail_url", "")
+        if not url:
+            continue
+        try:
+            resp = session.get(url, timeout=15)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            detail_wrap = soup.find("div", class_=re.compile(r"property-detail-wrap", re.I))
+            if detail_wrap:
+                for li in detail_wrap.find_all("li"):
+                    strong = li.find("strong")
+                    span = li.find("span")
+                    if strong and span:
+                        key = strong.get_text(strip=True).rstrip(":")
+                        if key.lower() == "contact":
+                            val = span.get_text(strip=True)
+                            if val:
+                                r["contact"] = val
+                            break
+        except Exception as e:
+            print(f"[BillboardScraper] Could not fetch contact for {url}: {e}")
+
+
 def format_billboard_results(data: Dict[str, Any], top_n: int = 5) -> str:
     """
     Format scraped billboard data into a readable markdown-style string
@@ -467,6 +499,7 @@ def format_billboard_results(data: Dict[str, Any], top_n: int = 5) -> str:
         labels = r.get("labels", [])
         codes = r.get("adbuq_codes", [])
         zone = r.get("zone", "")
+        contact = r.get("contact", "")
 
         label_str = " | ".join(f"🏷️ {l}" for l in labels) if labels else ""
 
@@ -477,10 +510,8 @@ def format_billboard_results(data: Dict[str, Any], top_n: int = 5) -> str:
         lines.append(f"- 💰 **Price:** {price}")
         if dims:
             lines.append(f"- 📐 **Size:** {dims} ft")
-        if zone:
-            lines.append(f"- 🗺️ **Zone:** {zone}")
-        if codes:
-            lines.append(f"- 🔖 **Adbuq Codes:** {', '.join(codes)}")
+        if contact:
+            lines.append(f"- 📞 **Contact:** {contact}")
         if img:
             lines.append(f"- 🖼️ **Image:** {img}")
         if url:

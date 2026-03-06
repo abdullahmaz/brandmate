@@ -17,7 +17,7 @@ from model_loader import (
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
-from billboard_scraper import scrape_billboards, format_billboard_results
+from billboard_scraper import scrape_billboards, format_billboard_results, enrich_with_contact
 
 load_dotenv()
 
@@ -155,6 +155,7 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                     try:
                         print(f"DEBUG: Scraping billboards — city={city}, ad_type={ad_type}")
                         scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
+                        enrich_with_contact(scrape_data.get("results", []), top_n=5)
                         response_message = format_billboard_results(scrape_data, top_n=5)
                         print(f"DEBUG: Billboard scrape complete — {len(scrape_data.get('results', []))} results")
                     except Exception as scrape_err:
