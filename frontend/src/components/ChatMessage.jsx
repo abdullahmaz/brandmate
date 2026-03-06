@@ -7,7 +7,7 @@ import { CONTENT_TYPE_TEXT, CONTENT_TYPE_IMAGE, CONTENT_TYPE_WEBSITE, TOOL_CONVE
 function BillboardImage({ src, alt }) {
   const [status, setStatus] = useState('loading');
   return (
-    <div className="mt-2 mb-1 rounded-xl border border-border/60 overflow-hidden bg-muted/30 shadow-sm w-full max-w-sm">
+    <div className="not-prose mt-2 mb-1 rounded-xl border border-border/60 overflow-hidden bg-muted/30 shadow-sm w-full max-w-sm">
       {status === 'loading' && (
         <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground animate-pulse">
           Loading image…
@@ -21,7 +21,7 @@ function BillboardImage({ src, alt }) {
       <img
         src={src}
         alt={alt}
-        className={`w-full max-h-[240px] object-cover ${status !== 'loaded' ? 'hidden' : ''}`}
+        className={`w-full h-[240px] object-cover block ${status !== 'loaded' ? 'hidden' : ''}`}
         onLoad={() => setStatus('loaded')}
         onError={() => setStatus('error')}
       />
