@@ -17,6 +17,7 @@ from model_loader import (
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
+from video_generator import VideoGenerator  # ← new import
 
 load_dotenv()
 
@@ -35,6 +36,9 @@ app.add_middleware(
 print("Starting Brandmate server... (LLM loading at startup; Image/Text load on demand)")
 threading.Thread(target=load_llm_at_startup, daemon=True).start()
 
+# Video generator — stays loaded (no heavy model, just ComfyUI HTTP client)
+video_generator = VideoGenerator()  # ← new
+
 class ChatMessage(BaseModel):
     role: str  # "system", "user", "assistant"
     content: str
@@ -47,6 +51,7 @@ class ChatRequest(BaseModel):
 class MessageRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
+    image_base64: str | None = None  # ← new: base64-encoded image for I2V
 
 class ChatResponse(BaseModel):
     message: str
@@ -56,7 +61,7 @@ class ChatResponse(BaseModel):
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
 
-async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage]) -> ChatResponse:
+async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage], image_bytes: bytes = None) -> ChatResponse:  # ← added image_bytes
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
         # Convert conversation history to list of dicts for LLM orchestrator
@@ -142,9 +147,34 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                     response_message = f"Text generation service is currently unavailable."
                 
             elif tool_name == "video_generation":
+                # ── NEW VIDEO BRANCH ───────────────────────────────────────
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
-                response_message = f"I'll help you create a {video_type} video for: {description}. This feature is coming soon!"
+                try:
+                    if image_bytes:
+                        # Image attached → Image-to-Video workflow
+                        print(f"DEBUG: Routing to I2V (image attached: {image_filename})")
+                        video_data = await video_generator.generate_i2v(
+                            prompt=description,
+                            image_bytes=image_bytes,
+                            video_type=video_type,
+                        )
+                    else:
+                        # No image → Text-to-Video workflow
+                        print(f"DEBUG: Routing to T2V (no image)")
+                        video_data = await video_generator.generate_t2v(
+                            prompt=description,
+                            video_type=video_type,
+                        )
+                    # Return video as base64; reuse the `generated_image` field
+                    # so the existing ChatResponse / frontend pipeline picks it up
+                    generated_image = video_data
+                    response_message = "Here's your generated video!"
+                    tool_used = "video_generation"
+                except Exception as video_error:
+                    print(f"Video generation error: {video_error}")
+                    response_message = "I encountered an issue generating the video. Please make sure ComfyUI is running and try again."
+                # ── END NEW VIDEO BRANCH ───────────────────────────────────
                 
             elif tool_name == "website_generation":
                 # One comprehensive prompt; website generator always produces a landing page.
@@ -245,6 +275,13 @@ async def create_chat(request: ChatCreate):
 async def send_message(chat_id: str, request: MessageRequest):
     """Send a message to an existing chat"""
     try:
+        # Decode base64 image to bytes if present (for I2V)
+        image_bytes = None
+        if request.image_base64:
+            import base64 as _base64
+            image_bytes = _base64.b64decode(request.image_base64)
+            print(f"DEBUG: Image received ({len(image_bytes)} bytes)")
+
         # Verify chat exists
         chat = await database_service.get_chat(chat_id)
         if not chat:
@@ -292,7 +329,7 @@ async def send_message(chat_id: str, request: MessageRequest):
                 chat_id=chat_id
             )
         
-        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history)
+        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history, image_bytes)
         
     except HTTPException:
         raise

@@ -101,9 +101,23 @@ const Chat = () => {
     createChatMutation.isPending,
   ]);
 
-  const handleSendMessage = async (message) => {
+  // --- IMAGE HELPER (new) ---
+  // Converts image to base64 if present, then sends plain JSON (same as original).
+  const buildPayload = async (message, imageFile, conversationHistory) => {
+    let image_base64 = null;
+    if (imageFile) {
+      image_base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(",")[1]);
+        reader.readAsDataURL(imageFile);
+      });
+    }
+    return { message, conversation_history: conversationHistory, image_base64 };
+  };
+
+  const handleSendMessage = async (message, imageFile = null) => {
     if (
-      !message.trim() ||
+      (!message.trim() && !imageFile) ||
       sendMessageMutation.isPending ||
       createChatMutation.isPending
     )
@@ -128,6 +142,7 @@ const Chat = () => {
           role: "user",
           content: message,
           message_type: MESSAGE_TYPE_TEXT,
+          image: imageFile ? URL.createObjectURL(imageFile) : null, // local preview
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
@@ -136,13 +151,10 @@ const Chat = () => {
         // Send the message to the new chat using the mutation
         sendMessageMutation.mutate({
           chatId: newChatId,
-          data: {
-            message,
-            conversation_history: [userMessage].map((msg) => ({
-              role: msg.role,
-              content: msg.content,
-            })),
-          },
+          data: await buildPayload(message, imageFile, [userMessage].map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }))),
         });
       } catch (error) {
         console.error("Error creating chat or sending message:", error);
@@ -167,6 +179,7 @@ const Chat = () => {
           role: "user",
           content: message,
           message_type: MESSAGE_TYPE_TEXT,
+          image: imageFile ? URL.createObjectURL(imageFile) : null, // local preview
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
 
@@ -180,10 +193,7 @@ const Chat = () => {
         // Send message using the mutation
         sendMessageMutation.mutate({
           chatId: chatId,
-          data: {
-            message,
-            conversation_history: history,
-          },
+          data: await buildPayload(message, imageFile, history),
         });
       } catch (error) {
         console.error("Error sending message:", error);
