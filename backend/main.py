@@ -391,11 +391,22 @@ async def send_message(chat_id: str, request: MessageRequest):
         
         # Save user message
         try:
+            user_image_s3 = None
+            if image_bytes:
+                try:
+                    import base64 as _b64
+                    img_b64 = f"data:image/jpeg;base64,{_b64.b64encode(image_bytes).decode()}"
+                    user_image_s3 = await storage_service.store_generated_image(img_b64, "user_upload")
+                    print(f"DEBUG: User image stored in S3: {user_image_s3}")
+                except Exception as s3_err:
+                    print(f"DEBUG: Failed to store user image: {s3_err}")
+
             user_message = await database_service.create_message(MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
-                message_type=MessageType.TEXT
+                message_type=MessageType.TEXT,
+                 s3_url=user_image_s3
             ))
         except Exception as db_error:
             error_msg = str(db_error)
