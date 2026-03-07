@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
 import uvicorn
 import asyncio
 import threading
@@ -64,6 +65,22 @@ class ChatResponse(BaseModel):
     tool: str | None = None
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
+
+async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
+    """Fetch the most recent generated image from this chat as bytes for I2V."""
+    try:
+        messages = await database_service.get_messages(chat_id, limit=50)
+        # Walk backwards, find latest message with s3_url and IMAGE type
+        for msg in reversed(messages):
+            if msg.s3_url and msg.message_type == MessageType.IMAGE:
+                import requests as _req
+                resp = _req.get(msg.s3_url, timeout=30)
+                resp.raise_for_status()
+                print(f"DEBUG: Fetched reference image from S3: {msg.s3_url}")
+                return resp.content
+    except Exception as e:
+        print(f"DEBUG: Failed to fetch reference image: {e}")
+    return None
 
 async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage], image_bytes: bytes = None) -> ChatResponse:  # ← added image_bytes
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
@@ -177,17 +194,34 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
+                use_reference_image = result["parameters"].get("use_reference_image", False)
                 try:
                     if image_bytes:
-                        # Image attached → Image-to-Video workflow
-                        print(f"DEBUG: Routing to I2V (image attached:)")
+                        # User attached an image — always use it
+                        print(f"DEBUG: Routing to I2V (image attached)")
                         video_data = await video_generator.generate_i2v(
                             prompt=description,
                             image_bytes=image_bytes,
                             video_type=video_type,
                         )
+                    elif use_reference_image:
+                        # User referred to a previous image — fetch latest from DB
+                        print(f"DEBUG: Routing to I2V (reference image from history)")
+                        ref_image_bytes = await _fetch_latest_image_from_chat(chat_id)
+                        if ref_image_bytes:
+                            video_data = await video_generator.generate_i2v(
+                                prompt=description,
+                                image_bytes=ref_image_bytes,
+                                video_type=video_type,
+                            )
+                        else:
+                            print(f"DEBUG: No reference image found, falling back to T2V")
+                            video_data = await video_generator.generate_t2v(
+                                prompt=description,
+                                video_type=video_type,
+                            )
                     else:
-                        # No image → Text-to-Video workflow
+                        # Pure text-to-video
                         print(f"DEBUG: Routing to T2V (no image)")
                         video_data = await video_generator.generate_t2v(
                             prompt=description,
@@ -198,8 +232,7 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                         print(f"DEBUG: Video stored in S3: {s3_url}")
                     except Exception as s3_error:
                         print(f"S3 storage error: {s3_error}")
-                        s3_url = video_data  # fallback to base64
-
+                        s3_url = video_data
                     generated_image = s3_url
                     response_message = "Here's your generated video!"
                     tool_used = "video_generation"
