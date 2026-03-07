@@ -61,6 +61,10 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   );
   const contentParts = useMemo(() => splitContentByImages(content), [content]);
 
+  // Determine download filename — videos are WEBP, everything else is PNG
+  const isVideo = tool === 'video_generation';
+  const imageDownloadFilename = isVideo ? 'video.webp' : 'image.png';  // ← new
+
   return (
     <div className="flex gap-4 px-4 py-5">
       <Avatar className="h-10 w-10 flex-shrink-0">
@@ -92,10 +96,10 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
 
           {image && (
             <div className="mt-3">
-              <HoverActions type={CONTENT_TYPE_IMAGE} downloadUrl={image} downloadFilename="image.png" className="w-fit" enabled={!isUser}>
+              <HoverActions type={CONTENT_TYPE_IMAGE} downloadUrl={image} downloadFilename={imageDownloadFilename} className="w-fit" enabled={!isUser}>
                 <img
                   src={image}
-                  alt="Generated content"
+                  alt={isVideo ? 'Generated video' : 'Generated content'}
                   className="rounded-xl max-w-full max-h-[320px] object-contain"
                 />
               </HoverActions>

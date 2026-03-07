@@ -34,10 +34,8 @@ const Chat = () => {
       // Clear AbortController
       abortControllerRef.current = null;
 
-      // Clear local messages since they'll be replaced by fresh API data
+      // Videos and images are now stored in S3 — always refresh from DB
       setLocalMessages([]);
-
-      // Invalidate chat data to refresh messages
       if (chatId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
       }

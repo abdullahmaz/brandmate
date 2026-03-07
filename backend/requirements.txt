@@ -15,9 +15,11 @@ pydantic
 accelerate
 sentencepiece
 protobuf
+bs4
 kernels
 nvidia-ml-py3
 supabase
 boto3
 peft
 json-repair
+websocket-client

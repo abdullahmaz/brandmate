@@ -175,13 +175,12 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                         )
 
             elif tool_name == "video_generation":
-                # ── NEW VIDEO BRANCH ───────────────────────────────────────
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
                 try:
                     if image_bytes:
                         # Image attached → Image-to-Video workflow
-                        print(f"DEBUG: Routing to I2V (image attached: {image_filename})")
+                        print(f"DEBUG: Routing to I2V (image attached:)")
                         video_data = await video_generator.generate_i2v(
                             prompt=description,
                             image_bytes=image_bytes,
@@ -194,15 +193,19 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                             prompt=description,
                             video_type=video_type,
                         )
-                    # Return video as base64; reuse the `generated_image` field
-                    # so the existing ChatResponse / frontend pipeline picks it up
-                    generated_image = video_data
+                    try:
+                        s3_url = await storage_service.store_generated_image(video_data, description)
+                        print(f"DEBUG: Video stored in S3: {s3_url}")
+                    except Exception as s3_error:
+                        print(f"S3 storage error: {s3_error}")
+                        s3_url = video_data  # fallback to base64
+
+                    generated_image = s3_url
                     response_message = "Here's your generated video!"
                     tool_used = "video_generation"
                 except Exception as video_error:
                     print(f"Video generation error: {video_error}")
                     response_message = "I encountered an issue generating the video. Please make sure ComfyUI is running and try again."
-                # ── END NEW VIDEO BRANCH ───────────────────────────────────
                 
             elif tool_name == "website_generation":
                 # One comprehensive prompt; website generator always produces a landing page.
