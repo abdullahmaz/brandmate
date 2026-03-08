@@ -3,6 +3,8 @@ import { Check, Copy, Download, ExternalLink } from 'lucide-react';
 import { CONTENT_TYPE_TEXT, CONTENT_TYPE_IMAGE, CONTENT_TYPE_WEBSITE } from '../constants/toolTypes';
 import { toast } from '@/hooks/use-toast';
 
+const API_BASE = 'http://localhost:8000';
+
 /**
  * Wrapper that shows hover actions: copy for text, download for image/website.
  */
@@ -52,7 +54,12 @@ export function HoverActions({
   const handleDownload = async () => {
     if (type === CONTENT_TYPE_IMAGE && downloadUrl) {
       try {
-        const res = await fetch(downloadUrl, { mode: 'cors' });
+        // Route through backend proxy to bypass S3 CORS and control filename
+        const proxyUrl = downloadUrl.startsWith('data:')
+          ? downloadUrl  // base64 data URL — use directly
+          : `${API_BASE}/api/image-proxy?url=${encodeURIComponent(downloadUrl)}`;
+
+        const res = await fetch(proxyUrl);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

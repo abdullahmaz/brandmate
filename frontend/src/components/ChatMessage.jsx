@@ -62,7 +62,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const contentParts = useMemo(() => splitContentByImages(content), [content]);
 
   // Determine download filename — videos are WEBP, everything else is PNG
-  const isVideo = tool === 'video_generation';
+  const isVideo = tool === 'video_generation' || tool === 'video';
   const imageDownloadFilename = isVideo ? 'video.webp' : 'image.png';  // ← new
 
   return (
