@@ -56,7 +56,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const label = isUser ? 'You' : 'Assistant';
   const iframeSrcDoc = useMemo(() =>
-    html ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="#"]');if(a){e.preventDefault();var el=document.querySelector(a.getAttribute('href'));if(el)el.scrollIntoView({behavior:'smooth'});}});<\/script>` : null,
+    html ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href]');if(!a)return;var href=a.getAttribute('href');if(href&&href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});}else{e.preventDefault();}});<\/script>` : null,
     [html]
   );
   const contentParts = useMemo(() => splitContentByImages(content), [content]);
