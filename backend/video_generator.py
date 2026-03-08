@@ -7,7 +7,7 @@ import random
 import shutil
 import time
 import urllib.request
-import websocket  # pip install websocket-client
+import websocket  
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +20,7 @@ COMFYUI_OUTPUT_PATH = os.getenv("COMFYUI_OUTPUT_PATH", r"C:\Users\katri\Document
 LOCAL_VIDEO_DIR = os.path.join(os.path.dirname(__file__), "generated_videos")
 WORKFLOWS_DIR = Path(__file__).parent / "workflows"
 
-# ── Node IDs (from exported workflow JSONs) ────────────────────────────────
+# ── Node IDs (from exported workflow JSONs)
 # T2V: wan2.1_t2v.json
 T2V_POSITIVE_NODE = "6"   # CLIPTextEncode – positive prompt
 T2V_SEED_NODE     = "3"   # KSampler        – seed
@@ -29,8 +29,6 @@ T2V_SEED_NODE     = "3"   # KSampler        – seed
 I2V_POSITIVE_NODE = "6"   # CLIPTextEncode – positive prompt
 I2V_IMAGE_NODE    = "52"  # LoadImage       – image filename
 I2V_SEED_NODE     = "3"   # KSampler        – seed
-# ──────────────────────────────────────────────────────────────────────────
-
 
 class VideoGenerator:
     def __init__(self):
@@ -39,10 +37,8 @@ class VideoGenerator:
         self._i2v_workflow = self._load_workflow("wan2.1_i2b_fun_1.4b.json")
         self.model_loaded = True  # ComfyUI manages its own model lifecycle
 
-        # Local folder to copy generated videos into (same as streamlit's final_videos)
+        # Local folder to copy generated videos into
         os.makedirs(LOCAL_VIDEO_DIR, exist_ok=True)
-
-    # ── Internal helpers ───────────────────────────────────────────────────
 
     def _load_workflow(self, filename: str) -> dict:
         path = WORKFLOWS_DIR / filename
@@ -50,7 +46,7 @@ class VideoGenerator:
             return json.load(f)
 
     def _upload_image_sync(self, image_bytes: bytes, filename: str = "brandmate_input.jpg") -> str:
-        """Upload image to ComfyUI synchronously (same as streamlit app)."""
+        "Upload image to ComfyUI synchronously"
         import requests
         files = {"image": (filename, image_bytes, "image/jpeg")}
         response = requests.post(f"{self.comfyui_url}/upload/image", files=files)
@@ -60,15 +56,6 @@ class VideoGenerator:
         return assigned_name
 
     def _generate_sync(self, workflow: dict) -> Optional[str]:
-        """
-        Exact same logic as the working streamlit app:
-        1. Connect WebSocket
-        2. Queue prompt with client_id
-        3. Wait for executing + node=None message
-        4. Lookup filename from history targeting node 28
-        5. Copy file to local folder
-        6. Return local file path
-        """
         # 1. Connect WebSocket
         ws = websocket.WebSocket()
         ws.connect(f"ws://{COMFYUI_ADDR}/ws?clientId={COMFYUI_CLIENT_ID}")
@@ -96,7 +83,7 @@ class VideoGenerator:
         ws.close()
 
         # 4. Lookup filename from history — target node 28 (SaveAnimatedWEBP)
-        time.sleep(2)  # buffer for file writing (same as streamlit app)
+        time.sleep(2)  # buffer for file writing
         video_filename = None
         try:
             with urllib.request.urlopen(f"{self.comfyui_url}/history/{prompt_id}") as res:
@@ -140,8 +127,6 @@ class VideoGenerator:
         with open(file_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode()
         return f"data:image/webp;base64,{b64}"
-
-    # ── Public API ─────────────────────────────────────────────────────────
 
     async def generate_t2v(self, prompt: str, video_type: str = "promotional") -> str:
         """Text-to-video — injects prompt into T2V workflow and returns base64 WEBP."""
