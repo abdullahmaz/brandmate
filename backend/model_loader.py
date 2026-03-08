@@ -39,8 +39,7 @@ def _text_device() -> str:
 
 
 def _website_device() -> str:
-    # Website generator (WEBGEN-4B): default GPU when available
-    return _device_from_env("WEBSITE", default_cuda=True)
+    return _device_from_env("WEBSITE")
 
 
 class _LazyHolder:
