@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
+import os
 import uvicorn
 import asyncio
 import threading
@@ -320,6 +321,85 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
 async def root():
     return {"message": "Brandmate API is running!"}
 
+@app.get("/api/convert-video")
+async def convert_video(url: str = Query(...)):
+    """Fetch a WEBP video from S3 and convert it to MP4 using ffmpeg, then stream it back."""
+    import tempfile, os, subprocess
+    import imageio_ffmpeg
+
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    try:
+        # Fetch WEBP from S3
+        resp = req_lib.get(url, timeout=60)
+        resp.raise_for_status()
+        webp_bytes = resp.content
+
+        # Extract frames from animated WEBP using Pillow, then encode to MP4 with ffmpeg
+        from PIL import Image
+        import io as _io
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp4_path = os.path.join(tmpdir, "output.mp4")
+
+            # Extract all frames from animated WEBP
+            img = Image.open(_io.BytesIO(webp_bytes))
+            frames = []
+            try:
+                while True:
+                    frame = img.copy().convert("RGB")
+                    frames.append(frame)
+                    img.seek(img.tell() + 1)
+            except EOFError:
+                pass
+
+            if not frames:
+                raise HTTPException(status_code=500, detail="No frames found in WEBP")
+
+            print(f"DEBUG: Extracted {len(frames)} frames from animated WEBP")
+
+            # Save frames as PNG files
+            frame_paths = []
+            for i, frame in enumerate(frames):
+                frame_path = os.path.join(tmpdir, f"frame_{i:04d}.png")
+                frame.save(frame_path)
+                frame_paths.append(frame_path)
+
+            # Encode frames to MP4 with ffmpeg at 16fps (ComfyUI default)
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            frame_pattern = os.path.join(tmpdir, "frame_%04d.png")
+            result = subprocess.run(
+                [
+                    ffmpeg_exe, "-y",
+                    "-framerate", "4",
+                    "-i", frame_pattern,
+                    "-vcodec", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                    mp4_path
+                ],
+                capture_output=True
+            )
+            print(f"DEBUG: ffmpeg stderr: {result.stderr.decode()}")
+            if result.returncode != 0:
+                raise HTTPException(status_code=500, detail=f"Video conversion failed: {result.stderr.decode()}")
+
+            with open(mp4_path, "rb") as f:
+                mp4_bytes = f.read()
+
+            print(f"DEBUG: MP4 size: {len(mp4_bytes)} bytes")
+
+        return StreamingResponse(
+            iter([mp4_bytes]),
+            media_type="video/mp4",
+            headers={"Content-Disposition": "attachment; filename=video.mp4"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not convert video: {e}")
 
 @app.get("/api/image-proxy")
 async def image_proxy(url: str = Query(...)):

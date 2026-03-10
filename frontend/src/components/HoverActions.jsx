@@ -54,17 +54,21 @@ export function HoverActions({
   const handleDownload = async () => {
     if (type === CONTENT_TYPE_IMAGE && downloadUrl) {
       try {
-        // Route through backend proxy to bypass S3 CORS and control filename
+        const isVideoFile = downloadFilename && downloadFilename.endsWith('.webp');
+        // Videos → convert to MP4; images → proxy for CORS bypass
         const proxyUrl = downloadUrl.startsWith('data:')
           ? downloadUrl  // base64 data URL — use directly
-          : `${API_BASE}/api/image-proxy?url=${encodeURIComponent(downloadUrl)}`;
+          : isVideoFile
+            ? `${API_BASE}/api/convert-video?url=${encodeURIComponent(downloadUrl)}`
+            : `${API_BASE}/api/image-proxy?url=${encodeURIComponent(downloadUrl)}`;
+        const filename = isVideoFile ? 'video.mp4' : (downloadFilename || 'image.png');
 
         const res = await fetch(proxyUrl);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = downloadFilename || 'image.png';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
