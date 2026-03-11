@@ -228,6 +228,9 @@ fine_tuning/.caption_progress_*.json
 # Generated Caption CSV Files (optional - remove if you want to track them)
 # fine_tuning/captions/*.csv
 
+#generated videos
+backend/generated_videos/
+
 # Test Files and Temporary Outputs
 test_*.csv
 *_test.csv

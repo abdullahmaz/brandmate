@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
+import os
 import uvicorn
 import asyncio
 import threading
@@ -20,6 +22,7 @@ from model_loader import (
 from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
+from video_generator import VideoGenerator  # ← new import
 from billboard_scraper import scrape_billboards, format_billboard_results, enrich_with_contact
 
 load_dotenv()
@@ -39,6 +42,9 @@ app.add_middleware(
 print("Starting Brandmate server... (LLM loading at startup; Image/Text load on demand)")
 threading.Thread(target=load_llm_at_startup, daemon=True).start()
 
+# Video generator — stays loaded (no heavy model, just ComfyUI HTTP client)
+video_generator = VideoGenerator()  # ← new
+
 class ChatMessage(BaseModel):
     role: str  # "system", "user", "assistant"
     content: str
@@ -51,6 +57,7 @@ class ChatRequest(BaseModel):
 class MessageRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
+    image_base64: str | None = None  # ← new: base64-encoded image for I2V
 
 class ChatResponse(BaseModel):
     message: str
@@ -60,7 +67,23 @@ class ChatResponse(BaseModel):
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
 
-async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage]) -> ChatResponse:
+async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
+    """Fetch the most recent generated image from this chat as bytes for I2V."""
+    try:
+        messages = await database_service.get_messages(chat_id, limit=50)
+        # Walk backwards, find latest message with s3_url and IMAGE type
+        for msg in reversed(messages):
+            if msg.s3_url and msg.message_type == MessageType.IMAGE:
+                import requests as _req
+                resp = _req.get(msg.s3_url, timeout=30)
+                resp.raise_for_status()
+                print(f"DEBUG: Fetched reference image from S3: {msg.s3_url}")
+                return resp.content
+    except Exception as e:
+        print(f"DEBUG: Failed to fetch reference image: {e}")
+    return None
+
+async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage], image_bytes: bytes = None) -> ChatResponse:  # ← added image_bytes
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
         # Convert conversation history to list of dicts for LLM orchestrator
@@ -172,7 +195,51 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
             elif tool_name == "video_generation":
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
-                response_message = f"I'll help you create a {video_type} video for: {description}. This feature is coming soon!"
+                use_reference_image = result["parameters"].get("use_reference_image", False)
+                try:
+                    if image_bytes:
+                        # User attached an image — always use it
+                        print(f"DEBUG: Routing to I2V (image attached)")
+                        video_data = await video_generator.generate_i2v(
+                            prompt=description,
+                            image_bytes=image_bytes,
+                            video_type=video_type,
+                        )
+                    elif use_reference_image:
+                        # User referred to a previous image — fetch latest from DB
+                        print(f"DEBUG: Routing to I2V (reference image from history)")
+                        ref_image_bytes = await _fetch_latest_image_from_chat(chat_id)
+                        if ref_image_bytes:
+                            video_data = await video_generator.generate_i2v(
+                                prompt=description,
+                                image_bytes=ref_image_bytes,
+                                video_type=video_type,
+                            )
+                        else:
+                            print(f"DEBUG: No reference image found, falling back to T2V")
+                            video_data = await video_generator.generate_t2v(
+                                prompt=description,
+                                video_type=video_type,
+                            )
+                    else:
+                        # Pure text-to-video
+                        print(f"DEBUG: Routing to T2V (no image)")
+                        video_data = await video_generator.generate_t2v(
+                            prompt=description,
+                            video_type=video_type,
+                        )
+                    try:
+                        s3_url = await storage_service.store_generated_image(video_data, description)
+                        print(f"DEBUG: Video stored in S3: {s3_url}")
+                    except Exception as s3_error:
+                        print(f"S3 storage error: {s3_error}")
+                        s3_url = video_data
+                    generated_image = s3_url
+                    response_message = "Here's your generated video!"
+                    tool_used = "video_generation"
+                except Exception as video_error:
+                    print(f"Video generation error: {video_error}")
+                    response_message = "I encountered an issue generating the video. Please make sure ComfyUI is running and try again."
                 
             elif tool_name == "website_generation":
                 # One comprehensive prompt; website generator always produces a landing page.
@@ -254,6 +321,85 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
 async def root():
     return {"message": "Brandmate API is running!"}
 
+@app.get("/api/convert-video")
+async def convert_video(url: str = Query(...)):
+    """Fetch a WEBP video from S3 and convert it to MP4 using ffmpeg, then stream it back."""
+    import tempfile, os, subprocess
+    import imageio_ffmpeg
+
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+    try:
+        # Fetch WEBP from S3
+        resp = req_lib.get(url, timeout=60)
+        resp.raise_for_status()
+        webp_bytes = resp.content
+
+        # Extract frames from animated WEBP using Pillow, then encode to MP4 with ffmpeg
+        from PIL import Image
+        import io as _io
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp4_path = os.path.join(tmpdir, "output.mp4")
+
+            # Extract all frames from animated WEBP
+            img = Image.open(_io.BytesIO(webp_bytes))
+            frames = []
+            try:
+                while True:
+                    frame = img.copy().convert("RGB")
+                    frames.append(frame)
+                    img.seek(img.tell() + 1)
+            except EOFError:
+                pass
+
+            if not frames:
+                raise HTTPException(status_code=500, detail="No frames found in WEBP")
+
+            print(f"DEBUG: Extracted {len(frames)} frames from animated WEBP")
+
+            # Save frames as PNG files
+            frame_paths = []
+            for i, frame in enumerate(frames):
+                frame_path = os.path.join(tmpdir, f"frame_{i:04d}.png")
+                frame.save(frame_path)
+                frame_paths.append(frame_path)
+
+            # Encode frames to MP4 with ffmpeg at 16fps (ComfyUI default)
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            frame_pattern = os.path.join(tmpdir, "frame_%04d.png")
+            result = subprocess.run(
+                [
+                    ffmpeg_exe, "-y",
+                    "-framerate", "4",
+                    "-i", frame_pattern,
+                    "-vcodec", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                    mp4_path
+                ],
+                capture_output=True
+            )
+            print(f"DEBUG: ffmpeg stderr: {result.stderr.decode()}")
+            if result.returncode != 0:
+                raise HTTPException(status_code=500, detail=f"Video conversion failed: {result.stderr.decode()}")
+
+            with open(mp4_path, "rb") as f:
+                mp4_bytes = f.read()
+
+            print(f"DEBUG: MP4 size: {len(mp4_bytes)} bytes")
+
+        return StreamingResponse(
+            iter([mp4_bytes]),
+            media_type="video/mp4",
+            headers={"Content-Disposition": "attachment; filename=video.mp4"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not convert video: {e}")
 
 @app.get("/api/image-proxy")
 async def image_proxy(url: str = Query(...)):
@@ -296,6 +442,13 @@ async def create_chat(request: ChatCreate):
 async def send_message(chat_id: str, request: MessageRequest):
     """Send a message to an existing chat"""
     try:
+        # Decode base64 image to bytes if present (for I2V)
+        image_bytes = None
+        if request.image_base64:
+            import base64 as _base64
+            image_bytes = _base64.b64decode(request.image_base64)
+            print(f"DEBUG: Image received ({len(image_bytes)} bytes)")
+
         # Verify chat exists
         chat = await database_service.get_chat(chat_id)
         if not chat:
@@ -318,11 +471,22 @@ async def send_message(chat_id: str, request: MessageRequest):
         
         # Save user message
         try:
+            user_image_s3 = None
+            if image_bytes:
+                try:
+                    import base64 as _b64
+                    img_b64 = f"data:image/jpeg;base64,{_b64.b64encode(image_bytes).decode()}"
+                    user_image_s3 = await storage_service.store_generated_image(img_b64, "user_upload")
+                    print(f"DEBUG: User image stored in S3: {user_image_s3}")
+                except Exception as s3_err:
+                    print(f"DEBUG: Failed to store user image: {s3_err}")
+
             user_message = await database_service.create_message(MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
-                message_type=MessageType.TEXT
+                message_type=MessageType.TEXT,
+                 s3_url=user_image_s3
             ))
         except Exception as db_error:
             error_msg = str(db_error)
@@ -343,7 +507,7 @@ async def send_message(chat_id: str, request: MessageRequest):
                 chat_id=chat_id
             )
         
-        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history)
+        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history, image_bytes)
         
     except HTTPException:
         raise

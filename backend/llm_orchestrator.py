@@ -117,6 +117,11 @@ class LLMOrchestrator:
                         "description": {
                             "type": "string",
                             "description": "Description of the video to create"
+                        },
+                        "use_reference_image": {
+                            "type": "boolean",
+                            "description": "Set to true if the user wants to animate a previously generated image from this conversation. Set to false for text-to-video.",
+                            "default": False
                         }
                     },
                     "required": ["description"]
@@ -292,7 +297,11 @@ class LLMOrchestrator:
 
         When users ask for videos, use:
         <video_generation>
-        {"parameters": {"description": "video description", "video_type": "promotional"}}
+        {"parameters": {"description": "video description", "video_type": "promotional", "use_reference_image": false}}
+
+        If the user refers to a previously generated image ("that image", "this image", "animate it", "make a video of it", "use that photo"), set use_reference_image to true:
+        <video_generation>
+        {"parameters": {"description": "video description", "video_type": "promotional", "use_reference_image": true}}
 
         When users ask for websites, use:
         <website_generation>

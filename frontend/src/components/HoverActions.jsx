@@ -3,6 +3,8 @@ import { Check, Copy, Download, ExternalLink } from 'lucide-react';
 import { CONTENT_TYPE_TEXT, CONTENT_TYPE_IMAGE, CONTENT_TYPE_WEBSITE } from '../constants/toolTypes';
 import { toast } from '@/hooks/use-toast';
 
+const API_BASE = 'http://localhost:8000';
+
 /**
  * Wrapper that shows hover actions: copy for text, download for image/website.
  */
@@ -52,12 +54,21 @@ export function HoverActions({
   const handleDownload = async () => {
     if (type === CONTENT_TYPE_IMAGE && downloadUrl) {
       try {
-        const res = await fetch(downloadUrl, { mode: 'cors' });
+        const isVideoFile = downloadFilename && downloadFilename.endsWith('.webp');
+        // Videos → convert to MP4; images → proxy for CORS bypass
+        const proxyUrl = downloadUrl.startsWith('data:')
+          ? downloadUrl  // base64 data URL — use directly
+          : isVideoFile
+            ? `${API_BASE}/api/convert-video?url=${encodeURIComponent(downloadUrl)}`
+            : `${API_BASE}/api/image-proxy?url=${encodeURIComponent(downloadUrl)}`;
+        const filename = isVideoFile ? 'video.mp4' : (downloadFilename || 'image.png');
+
+        const res = await fetch(proxyUrl);
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = downloadFilename || 'image.png';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();

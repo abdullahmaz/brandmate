@@ -1,0 +1,231 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 405707221679320,
+      "steps": 20,
+      "cfg": 6,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "54",
+        0
+      ],
+      "positive": [
+        "56",
+        0
+      ],
+      "negative": [
+        "56",
+        1
+      ],
+      "latent_image": [
+        "56",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "Core Subject: Using the provided reference image, generate a realistic cinematic fashion video. Keep the same person, outfit, colors, embroidery, hairstyle, and overall identity exactly as in the image.\n\nAction & Movement: The model walks straight forward with natural, confident movement. The model must strictly walk forward toward the camera and should not spin, twirl, or turn around. The kurta fabric and dupatta flow gently backward with each step in the desert wind. Subtle hand movement holding the dupatta, while keeping the body and face oriented toward the camera.\n\nExpanded Scenery & Background: The model is walking gracefully through a vast, majestic desert landscape. The background features endless, undulating sand dunes with razor-sharp crests that stretch to the horizon. The sand is pristine and untouched, highly textured with delicate, wind-swept ripples. The sky above is a breathtaking gradient, transitioning from deep azure blue at the top to dusty pink, apricot, and vibrant tangerine near the distant horizon, adorned with faint, wispy cirrus clouds.\n\nLighting & Atmosphere: Bathed in the rich, dramatic glow of golden hour, the low-hanging sun casts long, soft shadows that highlight the curves of the dunes. A gentle, warm desert breeze sweeps through the scene, creating a serene and ethereal environment. Fine, shimmering sand particles and dust motes gracefully dance in the air, catching the amber light for added atmospheric realism.\n\nCamera & Technical details: Smooth camera dolly-in, maintaining a steady, professional high-end fashion editorial style. Shallow depth of field to keep the model in crisp focus while the majestic dunes beautifully blur into the background. Ultra-realistic motion, natural body dynamics, highly detailed textures, 4K quality.",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "bad, camera shake, blur, ugly face, cartoon",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "28": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "fps": 4,
+      "lossless": false,
+      "quality": 90,
+      "method": "default",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveAnimatedWEBP",
+    "_meta": {
+      "title": "SaveAnimatedWEBP"
+    }
+  },
+  "37": {
+    "inputs": {
+      "unet_name": "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "38": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "39": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "49": {
+    "inputs": {
+      "clip_name": "clip_vision_h.safetensors"
+    },
+    "class_type": "CLIPVisionLoader",
+    "_meta": {
+      "title": "Load CLIP Vision"
+    }
+  },
+  "51": {
+    "inputs": {
+      "crop": "none",
+      "clip_vision": [
+        "49",
+        0
+      ],
+      "image": [
+        "52",
+        0
+      ]
+    },
+    "class_type": "CLIPVisionEncode",
+    "_meta": {
+      "title": "CLIP Vision Encode"
+    }
+  },
+  "52": {
+    "inputs": {
+      "image": "tes_image.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "54": {
+    "inputs": {
+      "shift": 8.000000000000002,
+      "model": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "56": {
+    "inputs": {
+      "width": [
+        "57",
+        1
+      ],
+      "height": [
+        "57",
+        2
+      ],
+      "length": [
+        "57",
+        3
+      ],
+      "batch_size": 1,
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ],
+      "clip_vision_output": [
+        "51",
+        0
+      ],
+      "start_image": [
+        "52",
+        0
+      ],
+      "camera_conditions": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "WanCameraImageToVideo",
+    "_meta": {
+      "title": "WanCameraImageToVideo"
+    }
+  },
+  "57": {
+    "inputs": {
+      "camera_pose": "Zoom Out",
+      "width": 512,
+      "height": 512,
+      "length": 49,
+      "speed": 1,
+      "fx": 0.5,
+      "fy": 0.5,
+      "cx": 0.5,
+      "cy": 0.5
+    },
+    "class_type": "WanCameraEmbedding",
+    "_meta": {
+      "title": "WanCameraEmbedding"
+    }
+  }
+}
