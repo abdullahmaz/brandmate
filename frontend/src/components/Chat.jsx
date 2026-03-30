@@ -252,12 +252,15 @@ const Chat = () => {
         {/* Welcome heading — fades out once welcomed */}
         <div
           className={`overflow-hidden text-center transition-all duration-300 ease-in-out ${
-            isWelcome ? 'max-h-16 opacity-100 pb-5' : 'max-h-0 opacity-0 pb-0'
+            isWelcome ? 'max-h-28 opacity-100 pb-5' : 'max-h-0 opacity-0 pb-0'
           }`}
         >
-          <h1 className="text-2xl font-semibold text-foreground/80 select-none">
-            What can I help with?
+          <h1 className="font-brand text-4xl font-semibold text-foreground/90 select-none tracking-wide">
+            What shall we create?
           </h1>
+          <p className="mt-1 text-sm text-muted-foreground select-none">
+            Your AI partner for Eastern fashion & brand marketing
+          </p>
         </div>
 
         <ChatInput

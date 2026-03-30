@@ -12,7 +12,7 @@ import { Sparkles } from 'lucide-react';
 function ImageBlock({ src, alt }) {
   const [status, setStatus] = useState('loading');
   return (
-    <div className="mt-2 rounded-xl overflow-hidden border border-border/40 bg-muted/20 w-full max-w-sm">
+    <div className="mt-2 rounded-xl overflow-hidden bg-muted/20 w-full max-w-sm">
       {status === 'loading' && (
         <div className="h-40 flex items-center justify-center text-xs text-muted-foreground animate-pulse">
           Loading…
@@ -123,7 +123,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
             <img
               src={image}
               alt={isVideo ? 'Generated video' : 'Generated image'}
-              className="rounded-xl max-w-sm max-h-72 object-contain border border-border/40"
+              className="rounded-xl max-w-sm max-h-72 object-contain"
             />
           </HoverActions>
         )}

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <defs>
+    <linearGradient id="gem-fill" x1="2" y1="9" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#758b74"/>
+      <stop offset="100%" stop-color="#3a4e3a"/>
+    </linearGradient>
+    <linearGradient id="crown-fill" x1="2" y1="3" x2="22" y2="9" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a8bda7"/>
+      <stop offset="100%" stop-color="#758b74"/>
+    </linearGradient>
+  </defs>
+  <!-- Pavilion (lower body) -->
+  <path d="M2 9L12 22L22 9Z" fill="url(#gem-fill)"/>
+  <!-- Crown (upper portion) -->
+  <path d="M6 3H18L22 9H2L6 3Z" fill="url(#crown-fill)"/>
+  <!-- Crown facet lines -->
+  <line x1="6" y1="3" x2="9" y2="9" stroke="#2d382c" stroke-width="0.6" stroke-linecap="round" opacity="0.5"/>
+  <line x1="18" y1="3" x2="15" y2="9" stroke="#2d382c" stroke-width="0.6" stroke-linecap="round" opacity="0.5"/>
+  <line x1="12" y1="3" x2="12" y2="9" stroke="#e6ede6" stroke-width="0.6" stroke-linecap="round" opacity="0.5"/>
+  <!-- Belt line -->
+  <line x1="2" y1="9" x2="22" y2="9" stroke="#2d382c" stroke-width="0.7" opacity="0.5"/>
+  <!-- Pavilion facet lines -->
+  <line x1="9" y1="9" x2="12" y2="22" stroke="#2d382c" stroke-width="0.5" stroke-linecap="round" opacity="0.35"/>
+  <line x1="15" y1="9" x2="12" y2="22" stroke="#2d382c" stroke-width="0.5" stroke-linecap="round" opacity="0.35"/>
+</svg>

@@ -10,6 +10,7 @@ import {
   Sun,
   Moon,
   Search,
+  Gem,
 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
 import { useTheme } from './ThemeProvider';
@@ -69,9 +70,12 @@ export function ChatSidebar() {
       )}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-shrink-0">
-          <span className="text-sm font-semibold text-sidebar-foreground select-none tracking-tight">
-            Brandmate
-          </span>
+          <div className="flex items-center gap-1.5">
+            <Gem className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+            <span className="font-brand text-base font-semibold text-sidebar-foreground select-none tracking-wide">
+              Brandmate
+            </span>
+          </div>
           <div className="flex items-center gap-0.5">
             <IconBtn onClick={toggleTheme} title="Toggle theme" sm>
               {theme === 'light' ? <Moon className="h-[14px] w-[14px]" /> : <Sun className="h-[14px] w-[14px]" />}
@@ -179,7 +183,7 @@ function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
   return (
     <div
       className={cn(
-        'group relative flex w-full min-w-0 items-center overflow-hidden rounded-lg cursor-pointer',
+        'group relative flex w-full min-w-0 items-center overflow-hidden rounded-lg cursor-pointer mb-0.5',
         active ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70'
       )}
       style={{ background: active ? 'var(--sidebar-accent)' : undefined }}

@@ -6,86 +6,86 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: #0d0d0d;
-  --card: #ffffff;
-  --card-foreground: #0d0d0d;
-  --popover: #ffffff;
-  --popover-foreground: #0d0d0d;
-  --primary: #10a37f;
-  --primary-foreground: #ffffff;
-  --secondary: #f7f7f8;
-  --secondary-foreground: #0d0d0d;
-  --muted: #ececec;
-  --muted-foreground: #666666;
-  --accent: #f7f7f8;
-  --accent-foreground: #0d0d0d;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #e5e5e5;
-  --input: #f7f7f8;
-  --input-background: #ffffff;
-  --switch-background: #e5e5e5;
+  --background: #F5F8F5;
+  --foreground: #202b20;
+  --card: #F5F8F5;
+  --card-foreground: #182018;
+  --popover: #F5F8F5;
+  --popover-foreground: #182018;
+  --primary: #4E6450;
+  --primary-foreground: #F5F8F5;
+  --secondary: #E6EDE6;
+  --secondary-foreground: #182018;
+  --muted: #DAE5DA;
+  --muted-foreground: #556655;
+  --accent: #E6EDE6;
+  --accent-foreground: #182018;
+  --destructive: #B91C1C;
+  --destructive-foreground: #F5F8F5;
+  --border: #C2D1C2;
+  --input: #E6EDE6;
+  --input-background: #F5F8F5;
+  --switch-background: #C2D1C2;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #10a37f;
-  --chart-1: #10a37f;
-  --chart-2: #0d8a6a;
-  --chart-3: #14b88e;
-  --chart-4: #a7e8d8;
-  --chart-5: #d4f4ec;
+  --ring: #4E6450;
+  --chart-1: #4E6450;
+  --chart-2: #758b74;
+  --chart-3: #8FA38E;
+  --chart-4: #C2D1C2;
+  --chart-5: #E6EDE6;
   --radius: 0.75rem;
-  --sidebar: #f9f9f9;
-  --sidebar-foreground: #0d0d0d;
-  --sidebar-primary: #10a37f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ececec;
-  --sidebar-accent-foreground: #0d0d0d;
-  --sidebar-border: #ebebeb;
-  --sidebar-ring: #10a37f;
-  --user-bubble: #efefef;
-  --user-bubble-fg: #0d0d0d;
+  --sidebar: #ECF2EC;
+  --sidebar-foreground: #182018;
+  --sidebar-primary: #4E6450;
+  --sidebar-primary-foreground: #F5F8F5;
+  --sidebar-accent: #DAE5DA;
+  --sidebar-accent-foreground: #182018;
+  --sidebar-border: #C2D1C2;
+  --sidebar-ring: #4E6450;
+  --user-bubble: #DAE5DA;
+  --user-bubble-fg: #182018;
 }
 
 .dark {
-  --background: #212121;
-  --foreground: #ececec;
-  --card: #2f2f2f;
-  --card-foreground: #ececec;
-  --popover: #2f2f2f;
-  --popover-foreground: #ececec;
-  --primary: #10a37f;
-  --primary-foreground: #ffffff;
-  --secondary: #2f2f2f;
-  --secondary-foreground: #ececec;
-  --muted: #424242;
-  --muted-foreground: #8e8ea0;
-  --accent: #2f2f2f;
-  --accent-foreground: #ececec;
-  --destructive: #f87171;
-  --destructive-foreground: #212121;
-  --border: #383838;
-  --input: #2f2f2f;
-  --input-background: #2f2f2f;
-  --switch-background: #424242;
-  --ring: #10a37f;
+  --background: #131A13;
+  --foreground: #DCE8DC;
+  --card: #1B241B;
+  --card-foreground: #DCE8DC;
+  --popover: #1B241B;
+  --popover-foreground: #DCE8DC;
+  --primary: #758b74;
+  --primary-foreground: #131A13;
+  --secondary: #1B241B;
+  --secondary-foreground: #DCE8DC;
+  --muted: #243024;
+  --muted-foreground: #8A9E8A;
+  --accent: #1B241B;
+  --accent-foreground: #DCE8DC;
+  --destructive: #F87171;
+  --destructive-foreground: #131A13;
+  --border: #2C3C2C;
+  --input: #1B241B;
+  --input-background: #1B241B;
+  --switch-background: #2C3C2C;
+  --ring: #758b74;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: #10a37f;
-  --chart-2: #0d8a6a;
-  --chart-3: #14b88e;
-  --chart-4: #065f46;
-  --chart-5: #064e3b;
-  --sidebar: #171717;
-  --sidebar-foreground: #ececec;
-  --sidebar-primary: #10a37f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #212121;
-  --sidebar-accent-foreground: #ececec;
-  --sidebar-border: #2f2f2f;
-  --sidebar-ring: #10a37f;
-  --user-bubble: #303030;
-  --user-bubble-fg: #ececec;
+  --chart-1: #758b74;
+  --chart-2: #4E6450;
+  --chart-3: #8FA38E;
+  --chart-4: #2C3C2C;
+  --chart-5: #1B241B;
+  --sidebar: #0D140D;
+  --sidebar-foreground: #DCE8DC;
+  --sidebar-primary: #758b74;
+  --sidebar-primary-foreground: #131A13;
+  --sidebar-accent: #131A13;
+  --sidebar-accent-foreground: #DCE8DC;
+  --sidebar-border: #1B241B;
+  --sidebar-ring: #758b74;
+  --user-bubble: #1F2D1F;
+  --user-bubble-fg: #DCE8DC;
 }
 
 @layer base {
@@ -162,6 +162,9 @@ html {
 
 /* Custom classes for the chat interface */
 @layer components {
+  .font-brand {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
   .sidebar-scroll {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
