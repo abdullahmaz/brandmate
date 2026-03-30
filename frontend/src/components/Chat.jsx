@@ -1,83 +1,135 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
 import { ChatInput } from "./ChatInput";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useCreateChat } from "../hooks/useChat";
 import { api } from "../services/api";
 import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
+import { queryKeys } from "../types/api";
+
+// How fast to reveal text: characters per tick, tick interval in ms
+const CHARS_PER_TICK = 6;
+const TICK_MS = 16; // ~60 fps
 
 const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [localMessages, setLocalMessages] = useState([]);
-  const [welcomed, setWelcomed] = useState(false); // true once first message is sent
+  const [welcomed, setWelcomed] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const abortControllerRef = useRef(null);
+  const typewriterRef = useRef(null);
+  const prevChatIdRef = useRef(chatId);
 
-  // Reset local state when switching chats
   useEffect(() => {
-    setLocalMessages([]);
-    if (!chatId) setWelcomed(false);
-  }, [chatId]);
+    if (typewriterRef.current) {
+      clearInterval(typewriterRef.current);
+      typewriterRef.current = null;
+    }
+    const prev = prevChatIdRef.current;
+    prevChatIdRef.current = chatId;
 
-  // Only load chat data if we have a chatId and no local messages
+    if (prev && prev !== chatId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.chat(prev) });
+    }
+
+    const fromWelcomeToNewChat = prev === undefined && chatId !== undefined;
+    if (!fromWelcomeToNewChat) {
+      setLocalMessages([]);
+    }
+    setIsTyping(false);
+    if (!chatId) setWelcomed(false);
+  }, [chatId, queryClient]);
+
+  useEffect(() => {
+    return () => {
+      if (typewriterRef.current) clearInterval(typewriterRef.current);
+    };
+  }, []);
+
   const { data: chatData, isLoading: chatLoading } = useChat(chatId);
 
-  // Send message mutation with custom onSuccess handler
+  const runTypewriter = useCallback((msgId, fullText, image, html, tool) => {
+    setIsTyping(true);
+    let pos = 0;
+
+    typewriterRef.current = setInterval(() => {
+      pos = Math.min(pos + CHARS_PER_TICK, fullText.length);
+      const done = pos >= fullText.length;
+
+      setLocalMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === msgId
+            ? {
+                ...msg,
+                content: fullText.slice(0, pos),
+                // Reveal image/html/tool only once text is fully shown
+                ...(done ? { image: image || null, html: html || null, tool: tool || null } : {}),
+              }
+            : msg
+        )
+      );
+
+      if (done) {
+        clearInterval(typewriterRef.current);
+        typewriterRef.current = null;
+        setIsTyping(false);
+      }
+    }, TICK_MS);
+  }, []);
+
+  // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: ({ chatId, data }) => {
-      // Create a new AbortController for this request
       abortControllerRef.current = new AbortController();
       return api.sendMessage(chatId, data, abortControllerRef.current.signal);
     },
     onSuccess: (response) => {
       abortControllerRef.current = null;
+      const { message, image, html, tool } = response.data;
+      const msgId = `assistant-${Date.now()}`;
 
-      // Append assistant response directly to local state — no refetch needed
-      const assistantMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: response.data.message,
-        message_type: MESSAGE_TYPE_TEXT,
-        image: response.data.image || null,
-        html: response.data.html || null,
-        tool: response.data.tool || null,
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
-      };
+      // Add placeholder with empty content, then typewrite into it
+      setLocalMessages((prev) => [
+        ...prev,
+        {
+          id: msgId,
+          role: "assistant",
+          content: "",
+          message_type: MESSAGE_TYPE_TEXT,
+          image: null,
+          html: null,
+          tool: null,
+          timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
+        },
+      ]);
 
-      setLocalMessages((prev) => [...prev, assistantMessage]);
+      runTypewriter(msgId, message, image, html, tool);
     },
     onError: (error) => {
-      // Clear AbortController
       abortControllerRef.current = null;
-
-      // Don't show error message if request was aborted
-      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
-        return;
-      }
+      if (error.name === "CanceledError" || error.code === "ERR_CANCELED") return;
 
       console.error("Failed to send message:", error);
-
-      const errorMessage = {
-        id: `error-${Date.now()}`,
-        role: "assistant",
-        content:
-          "Sorry, there was an error processing your request. Please try again.",
-        message_type: MESSAGE_TYPE_TEXT,
-        timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
-      };
-
-      setLocalMessages((prev) => [...prev, errorMessage]);
+      setLocalMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "Sorry, there was an error processing your request. Please try again.",
+          message_type: MESSAGE_TYPE_TEXT,
+          timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
+        },
+      ]);
     },
   });
 
-  // Create chat mutation
   const createChatMutation = useCreateChat();
 
-  // Convert API messages to UI format and merge with local state
   const messages = useMemo(() => {
-    // Convert API messages to UI format
     const apiMessages = chatData?.messages
       ? chatData.messages.map((msg) => ({
           id: msg.id,
@@ -89,26 +141,13 @@ const Chat = () => {
           tool: msg.message_type !== MESSAGE_TYPE_TEXT ? msg.message_type : null,
           image: msg.s3_url || null,
           html: msg.message_type === MESSAGE_TYPE_WEBSITE ? (msg.metadata?.html ?? null) : null,
-          timestamp: formatDistanceToNow(new Date(msg.created_at), {
-            addSuffix: true,
-          }),
+          timestamp: formatDistanceToNow(new Date(msg.created_at), { addSuffix: true }),
         }))
       : [];
 
-    if (localMessages.length > 0) {
-      return [...apiMessages, ...localMessages];
-    }
+    return localMessages.length > 0 ? [...apiMessages, ...localMessages] : apiMessages;
+  }, [chatData?.messages, localMessages]);
 
-    return apiMessages;
-  }, [
-    chatData?.messages,
-    localMessages,
-    sendMessageMutation.isPending,
-    createChatMutation.isPending,
-  ]);
-
-  // --- IMAGE HELPER (new) ---
-  // Converts image to base64 if present, then sends plain JSON (same as original).
   const buildPayload = async (message, imageFile, conversationHistory) => {
     let image_base64 = null;
     if (imageFile) {
@@ -129,139 +168,115 @@ const Chat = () => {
     )
       return;
 
-    // If no chatId, create a new chat first
     if (!chatId) {
-      setWelcomed(true); // trigger slide-down animation immediately
+      setWelcomed(true);
       try {
-        // Create new chat using the mutation hook
-        const chatData = await createChatMutation.mutateAsync({
-          title: message,
-        });
-
+        const chatData = await createChatMutation.mutateAsync({ title: message });
         const newChatId = chatData.data.chat_id;
-
-        // Navigate to the new chat
         navigate(`/chat/${newChatId}`);
 
-        // Add user message to local state
         const userMessage = {
           id: `user-${Date.now()}`,
           role: "user",
           content: message,
           message_type: MESSAGE_TYPE_TEXT,
-          image: imageFile ? URL.createObjectURL(imageFile) : null, // local preview
+          image: imageFile ? URL.createObjectURL(imageFile) : null,
           timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
         };
-
         setLocalMessages([userMessage]);
 
-        // Send the message to the new chat using the mutation
         sendMessageMutation.mutate({
           chatId: newChatId,
-          data: await buildPayload(message, imageFile, [userMessage].map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          }))),
+          data: await buildPayload(message, imageFile, [
+            { role: userMessage.role, content: userMessage.content },
+          ]),
         });
       } catch (error) {
-        console.error("Error creating chat or sending message:", error);
-        // Add error message to local state
-        const errorMessage = {
-          id: `error-${Date.now()}`,
-          role: "assistant",
-          content:
-            "Sorry, there was an error creating a new chat. Please try again.",
-          message_type: MESSAGE_TYPE_TEXT,
-          timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
-        };
-
-        setLocalMessages((prev) => [...prev, errorMessage]);
+        console.error("Error creating chat:", error);
+        setLocalMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: "Sorry, there was an error creating a new chat. Please try again.",
+            message_type: MESSAGE_TYPE_TEXT,
+            timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
+          },
+        ]);
       }
     } else {
-      // Chat exists, send message normally
-      try {
-        // Add user message to local state immediately
-        const userMessage = {
-          id: `user-${Date.now()}`,
-          role: "user",
-          content: message,
-          message_type: MESSAGE_TYPE_TEXT,
-          image: imageFile ? URL.createObjectURL(imageFile) : null, // local preview
-          timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
-        };
+      const userMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: message,
+        message_type: MESSAGE_TYPE_TEXT,
+        image: imageFile ? URL.createObjectURL(imageFile) : null,
+        timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
+      };
+      setLocalMessages((prev) => [...prev, userMessage]);
 
-        setLocalMessages((prev) => [...prev, userMessage]);
+      const history = messages.slice(-5).map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
 
-        const history = messages.slice(-5).map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        }));
-
-        // Send message using the mutation
-        sendMessageMutation.mutate({
-          chatId: chatId,
-          data: await buildPayload(message, imageFile, history),
-        });
-      } catch (error) {
-        console.error("Error sending message:", error);
-
-        // Add error message to local state
-        const errorMessage = {
-          id: `error-${Date.now()}`,
-          role: "assistant",
-          content:
-            "Sorry, there was an error processing your request. Please try again.",
-          message_type: MESSAGE_TYPE_TEXT,
-          timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
-        };
-
-        setLocalMessages((prev) => [...prev, errorMessage]);
-      }
+      sendMessageMutation.mutate({
+        chatId,
+        data: await buildPayload(message, imageFile, history),
+      });
     }
   };
 
   const handleStop = () => {
+    // Cancel in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    // Stop typewriter mid-animation
+    if (typewriterRef.current) {
+      clearInterval(typewriterRef.current);
+      typewriterRef.current = null;
+      setIsTyping(false);
+    }
     sendMessageMutation.reset();
   };
 
-  const isLoading =
-    sendMessageMutation.isPending ||
-    createChatMutation.isPending;
+  const isPending = sendMessageMutation.isPending || createChatMutation.isPending;
+  const isLoading = isPending || isTyping;
+  const lastLocal = localMessages[localMessages.length - 1];
+  const showTypingIndicator =
+    isPending && (lastLocal == null || lastLocal.role === "user");
 
   const isWelcome = !chatId && !welcomed;
 
+  // Full-area spinner only when the chat query has nothing to show yet. After creating a chat,
+  // we already have optimistic local messages — keep showing ChatArea while GET /chats/:id runs.
+  const showChatSkeleton = chatLoading && messages.length === 0;
+
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      {/* Messages — hidden (not removed) on welcome so layout is stable */}
       <div
         className={`flex-1 min-h-0 overflow-hidden transition-opacity duration-300 ${
-          isWelcome ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          isWelcome ? "opacity-0 pointer-events-none" : "opacity-100"
         }`}
       >
-        {chatLoading ? (
+        {showChatSkeleton ? (
           <div className="flex h-full items-center justify-center">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : (
-          <ChatArea messages={messages} isLoading={isLoading} />
+          <ChatArea messages={messages} isLoading={showTypingIndicator} />
         )}
       </div>
 
-      {/* Bottom panel: heading + input.
-          In welcome mode the whole panel is translated upward so it appears
-          vertically centered. On first send it transitions back to y=0. */}
       <div
         className="transition-transform duration-500 ease-[cubic-bezier(0.33,1,0.68,1)]"
-        style={{ transform: isWelcome ? 'translateY(calc(-50vh + 85px))' : 'translateY(0)' }}
+        style={{ transform: isWelcome ? "translateY(calc(-50vh + 85px))" : "translateY(0)" }}
       >
-        {/* Welcome heading — fades out once welcomed */}
         <div
           className={`overflow-hidden text-center transition-all duration-300 ease-in-out ${
-            isWelcome ? 'max-h-28 opacity-100 pb-5' : 'max-h-0 opacity-0 pb-0'
+            isWelcome ? "max-h-28 opacity-100 pb-5" : "max-h-0 opacity-0 pb-0"
           }`}
         >
           <h1 className="font-brand text-4xl font-semibold text-foreground/90 select-none tracking-wide">
@@ -274,7 +289,7 @@ const Chat = () => {
 
         <ChatInput
           onSendMessage={handleSendMessage}
-          isLoading={isLoading || chatLoading}
+          isLoading={isLoading || showChatSkeleton}
           onStop={handleStop}
           placeholder="Message Brandmate…"
         />

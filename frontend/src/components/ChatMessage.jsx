@@ -7,8 +7,6 @@ import {
   CONTENT_TYPE_WEBSITE,
   TOOL_CONVERSATION,
 } from '../constants/toolTypes';
-import { Sparkles } from 'lucide-react';
-
 function ImageBlock({ src, alt }) {
   const [status, setStatus] = useState('loading');
   return (
@@ -92,14 +90,8 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
 
   /* ── ASSISTANT MESSAGE ────────────────────────────────────────── */
   return (
-    <div className="group flex gap-3 px-4 py-2">
-      {/* Avatar */}
-      <div className="mt-1 flex-shrink-0 h-7 w-7 rounded-full bg-primary flex items-center justify-center">
-        <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-2">
+    <div className="group flex px-4 py-2">
+      <div className="min-w-0 flex-1 space-y-2">
         <HoverActions type={CONTENT_TYPE_TEXT} copyContent={content} enabled>
           <div className="prose prose-sm max-w-none dark:prose-invert text-foreground break-words leading-relaxed">
             {parts.map((p, i) =>
