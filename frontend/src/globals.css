@@ -41,6 +41,7 @@
   --sidebar-primary-foreground: #F5F8F5;
   --sidebar-accent: #DAE5DA;
   --sidebar-accent-foreground: #182018;
+  --sidebar-hover: #E3EBE3;
   --sidebar-border: #C2D1C2;
   --sidebar-ring: #4E6450;
   --user-bubble: #DAE5DA;
@@ -82,6 +83,7 @@
   --sidebar-primary-foreground: #131A13;
   --sidebar-accent: #131A13;
   --sidebar-accent-foreground: #DCE8DC;
+  --sidebar-hover: #101610;
   --sidebar-border: #1B241B;
   --sidebar-ring: #758b74;
   --user-bubble: #1F2D1F;

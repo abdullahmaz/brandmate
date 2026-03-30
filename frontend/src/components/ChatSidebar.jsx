@@ -187,7 +187,7 @@ function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
         active ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70'
       )}
       style={{ background: active ? 'var(--sidebar-accent)' : undefined }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--sidebar-accent)'; e.currentTarget.style.color = 'var(--sidebar-foreground)'; }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--sidebar-hover)'; e.currentTarget.style.color = 'var(--sidebar-foreground)'; }}
       onMouseLeave={e => { if (!active) { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; } }}
       onClick={onSelect}
       role="button"
