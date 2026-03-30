@@ -6,17 +6,13 @@ import {
   CHAT_LOADING_WORD_ROTATE_MS,
 } from '../constants/loadingWords';
 
-/** Compact three-dot pulse (Claude Code–style), muted — no transform so scroll areas don’t clip */
-function LoadingDots() {
+/** Dual conic rings + core pulse — see `@layer components` in globals.css */
+function ChatLoadingSpinner() {
   return (
-    <div className="flex shrink-0 items-center gap-[3px] self-center" aria-hidden>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-[3px] w-[3px] shrink-0 rounded-full bg-muted-foreground motion-safe:animate-claude-loader-dot motion-reduce:animate-none motion-reduce:opacity-50"
-          style={{ animationDelay: `${i * 0.14}s` }}
-        />
-      ))}
+    <div className="chat-loading-spinner" aria-hidden>
+      <div className="chat-loading-spinner__ring chat-loading-spinner__ring--outer" />
+      <div className="chat-loading-spinner__ring chat-loading-spinner__ring--inner" />
+      <div className="chat-loading-spinner__core" />
     </div>
   );
 }
@@ -54,8 +50,8 @@ export function ChatArea({ messages, isLoading }) {
         ))}
 
         {isLoading && (
-          <div className="flex items-center gap-2 px-4 py-2">
-            <LoadingDots />
+          <div className="flex items-center gap-3 px-4 py-2">
+            <ChatLoadingSpinner />
             <p
               key={loadingWordIndex}
               className="min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground motion-safe:animate-loading-line-in"

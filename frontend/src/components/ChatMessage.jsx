@@ -6,6 +6,8 @@ import {
   CONTENT_TYPE_IMAGE,
   CONTENT_TYPE_WEBSITE,
   TOOL_CONVERSATION,
+  TOOL_IMAGE_GENERATION,
+  TOOL_WEBSITE_GENERATION,
 } from '../constants/toolTypes';
 function ImageBlock({ src, alt }) {
   const [status, setStatus] = useState('loading');
@@ -49,6 +51,8 @@ function splitContent(content) {
 export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const isVideo = tool === 'video_generation' || tool === 'video';
+  const showTextCopy =
+    !isVideo && tool !== TOOL_IMAGE_GENERATION && tool !== TOOL_WEBSITE_GENERATION;
   const iframeSrcDoc = useMemo(() =>
     html
       ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href');if(h&&h.startsWith('#')){e.preventDefault();var el=document.querySelector(h);if(el)el.scrollIntoView({behavior:'smooth'});}else{e.preventDefault();}});<\/script>`
@@ -92,7 +96,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   return (
     <div className="group flex px-4 py-2">
       <div className="min-w-0 flex-1 space-y-2">
-        <HoverActions type={CONTENT_TYPE_TEXT} copyContent={content} enabled>
+        <HoverActions type={CONTENT_TYPE_TEXT} copyContent={showTextCopy ? content : null} enabled>
           <div className="prose prose-sm max-w-none dark:prose-invert text-foreground break-words leading-relaxed">
             {parts.map((p, i) =>
               p.type === 'image' ? (

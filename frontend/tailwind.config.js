@@ -84,16 +84,11 @@ export default {
           from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
-        "claude-loader-dot": {
-          "0%, 100%": { opacity: "0.2" },
-          "50%": { opacity: "0.95" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "loading-line-in": "loading-line-in 0.45s ease-out",
-        "claude-loader-dot": "claude-loader-dot 0.9s ease-in-out infinite",
       },
     },
   },
