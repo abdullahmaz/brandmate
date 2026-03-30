@@ -1,29 +1,34 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
 import {
   PlusIcon,
   MessageSquare,
   PanelLeftClose,
-  Settings,
+  PanelLeft,
   Loader2,
   Trash2,
   Sun,
   Moon,
   Search,
-  Bookmark,
-  BookOpen,
-  Sparkles,
 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
-import { formatDistanceToNow } from 'date-fns';
 import { useTheme } from './ThemeProvider';
+import { cn } from '../lib/utils';
+import { isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
 
-/**
- * Chat sidebar component that shows conversations list
- */
+function groupChats(chats) {
+  const groups = { Today: [], Yesterday: [], 'This week': [], 'This month': [], Older: [] };
+  for (const c of chats) {
+    const d = new Date(c.updated_at || c.created_at);
+    if (isToday(d)) groups['Today'].push(c);
+    else if (isYesterday(d)) groups['Yesterday'].push(c);
+    else if (isThisWeek(d)) groups['This week'].push(c);
+    else if (isThisMonth(d)) groups['This month'].push(c);
+    else groups['Older'].push(c);
+  }
+  return Object.entries(groups).filter(([, items]) => items.length > 0);
+}
+
 export function ChatSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,223 +36,192 @@ export function ChatSidebar() {
 
   const { data: chats, isLoading } = useChats();
   const deleteChatMutation = useDeleteChat();
-  const [deletingChatId, setDeletingChatId] = useState(null);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const onToggle = () => setIsCollapsed((prev) => !prev);
+  const [deletingId, setDeletingId] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [search, setSearch] = useState('');
 
-  
-  const selectedConversationId = location.pathname.split('/').pop();
-  const query = searchTerm.trim().toLowerCase();
-  const filteredChats = (chats || []).filter((conversation) => {
-    const title = (conversation.title || '').toLowerCase();
-    return query === '' || title.includes(query);
-  });
-  
-  const handleNewConversation = () => {
-    navigate('/chat');
-  };
-  
-  const handleSelectConversation = (conversationId) => {
-    navigate(`/chat/${conversationId}`);
-  };
+  const activeChatId = location.pathname.split('/chat/')[1] ?? null;
+  const filtered = (chats || []).filter((c) =>
+    !search.trim() || (c.title || '').toLowerCase().includes(search.toLowerCase())
+  );
+  const grouped = search.trim() ? null : groupChats(filtered);
 
-  const handleDeleteClick = async (e, conversationId) => {
-    e.stopPropagation(); // Prevent triggering the conversation selection
-    
-    setDeletingChatId(conversationId);
-    
+  const handleDelete = async (e, id) => {
+    e.stopPropagation();
+    setDeletingId(id);
     try {
-      await deleteChatMutation.mutateAsync(conversationId);
-      
-      // If we're currently viewing the deleted chat, navigate to home
-      if (selectedConversationId === conversationId) {
-        navigate('/chat');
-      }
-    } catch (error) {
-      console.error('Failed to delete chat:', error);
-      // You could add a toast notification here
-    } finally {
-      setDeletingChatId(null);
-    }
+      await deleteChatMutation.mutateAsync(id);
+      if (activeChatId === id) navigate('/chat');
+    } catch {}
+    finally { setDeletingId(null); }
   };
-
-  if (isCollapsed) {
-    return (
-      <div className="w-16 bg-sidebar border border-sidebar-border flex flex-col items-center py-4 gap-4 rounded-2xl shadow-xl shadow-black/5">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggle}
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          <PanelLeftClose className="h-5 w-5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewConversation}
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          <PlusIcon className="h-5 w-5" />
-        </Button>
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-sidebar-foreground hover:bg-sidebar-accent"
-        >
-          <Settings className="h-5 w-5" />
-        </Button>
-      </div>
-    );
-  }
 
   return (
-    <div className="w-[320px] flex-shrink-0 bg-sidebar/80 border border-sidebar-border rounded-2xl flex flex-col h-full shadow-2xl shadow-black/5 backdrop-blur-lg overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-            <p className="text-md font-semibold text-sidebar-foreground">Brandmate</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onToggle} className="hover:bg-sidebar-accent">
-            <PanelLeftClose className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="px-4 py-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sidebar-foreground/50" />
-          <Input
-            type="text"
-            placeholder="Search for chats..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="h-9 rounded-xl border-sidebar-border pl-9 pr-3 text-sm focus-visible:ring-sidebar-ring"
-          />
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1 min-h-0 px-4 pb-4">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold text-sidebar-foreground">
-              <BookOpen className="h-4 w-4 text-sidebar-foreground/60" />
-              <span>Chat history</span>
-            </div>
-            <span className="rounded-full bg-sidebar-accent px-2 py-1 text-xs text-sidebar-foreground/70">
-              {searchTerm.trim() ? filteredChats.length : chats?.length || 0} chat(s)
-            </span>
+    /* Outer shell transitions its width */
+    <div
+      className="relative flex-shrink-0 bg-sidebar border-r border-sidebar-border h-full overflow-hidden transition-[width] duration-300 ease-in-out"
+      style={{ width: collapsed ? '56px' : '260px' }}
+    >
+      {/* ── EXPANDED content ─────────────────────────────────── */}
+      <div className={cn(
+        'absolute inset-0 flex flex-col transition-[opacity,transform] duration-300 ease-in-out',
+        collapsed ? 'opacity-0 -translate-x-3 pointer-events-none' : 'opacity-100 translate-x-0'
+      )}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-shrink-0">
+          <span className="text-sm font-semibold text-sidebar-foreground select-none tracking-tight">
+            Brandmate
+          </span>
+          <div className="flex items-center gap-0.5">
+            <IconBtn onClick={toggleTheme} title="Toggle theme" sm>
+              {theme === 'light' ? <Moon className="h-[14px] w-[14px]" /> : <Sun className="h-[14px] w-[14px]" />}
+            </IconBtn>
+            <IconBtn onClick={() => setCollapsed(true)} title="Collapse" sm>
+              <PanelLeftClose className="h-[14px] w-[14px]" />
+            </IconBtn>
           </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-sidebar-foreground/70" />
-            </div>
-          ) : chats && chats.length > 0 ? (
-            filteredChats.length > 0 ? (
-              <div className="space-y-2">
-                {filteredChats.map((conversation) => {
-                  const isSelected = selectedConversationId === conversation.id;
-                  return (
-                    <div
-                      key={conversation.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelectConversation(conversation.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectConversation(conversation.id);
-                        }
-                      }}
-                      className={`group w-full rounded-xl border px-3 py-3 text-left shadow-sm transition hover:border-sidebar-ring hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sidebar-ring ${
-                        isSelected
-                          ? 'border-sidebar-ring bg-sidebar-accent/80'
-                          : 'border-sidebar-border bg-sidebar-accent/60 dark:bg-sidebar-accent/75'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-full bg-sidebar-primary/15 text-sidebar-primary flex items-center justify-center">
-                          <MessageSquare className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="line-clamp-2 text-sm font-semibold text-sidebar-foreground">
-                              {conversation.title}
-                            </h3>
-                            
-                          </div>
-                          <span className="text-[11px] text-sidebar-foreground/60">
-                              {formatDistanceToNow(new Date(conversation.updated_at), { addSuffix: true })}
-                            </span>
-                          <div className="flex items-center justify-end pt-1">
-                            <button
-                              onClick={(e) => handleDeleteClick(e, conversation.id)}
-                              disabled={deletingChatId === conversation.id}
-                              className="rounded p-1 text-red-500 opacity-0 transition hover:bg-red-500/10 group-hover:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Delete conversation"
-                            >
-                              {deletingChatId === conversation.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3 w-3" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-sidebar-foreground/70">
-                <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm font-semibold">No conversations match your search</p>
-                <p className="text-xs mt-1">Try a different title</p>
-              </div>
-            )
-          ) : (
-            <div className="text-center py-8 text-sidebar-foreground/70">
-              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm font-semibold">No conversations yet</p>
-              <p className="text-xs mt-1">Start a new conversation to get started</p>
-            </div>
-          )}
         </div>
-      </ScrollArea>
 
-      {/* Footer */}
-      <div className="px-4 py-4 border-t border-sidebar-border bg-sidebar/80">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <Button
-            variant="ghost"
-            className="flex-1 justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+        {/* New chat */}
+        <div className="px-2 pb-1 flex-shrink-0">
+          <button
+            onClick={() => navigate('/chat')}
+            className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
           >
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
-          </Button>
+            <PlusIcon className="h-4 w-4 flex-shrink-0" />
+            <span>New chat</span>
+          </button>
         </div>
-        <Button
-          onClick={handleNewConversation}
-          className="w-full rounded-xl bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 shadow-md shadow-sidebar-primary/20"
-        >
-          <PlusIcon className="h-4 w-4 mr-2" />
-          Start new chat
-        </Button>
+
+        {/* Search */}
+        <div className="px-2 pb-2 flex-shrink-0">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/50" />
+            <input
+              type="text"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-sidebar-border pl-8 pr-3 py-1.5 text-xs text-sidebar-foreground outline-none focus:border-ring/50 transition-colors"
+              style={{ background: 'var(--sidebar-accent)', color: 'var(--sidebar-foreground)' }}
+            />
+          </div>
+        </div>
+
+        {/* Chat list */}
+        <div className="sidebar-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="w-full px-2 pb-3">
+            {isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground/40" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-sidebar-foreground/40">
+                <MessageSquare className="h-6 w-6" />
+                <p className="text-xs">{search ? 'No matches' : 'No chats yet'}</p>
+              </div>
+            ) : search.trim() ? (
+              filtered.map((chat) => (
+                <ChatItem
+                  key={chat.id}
+                  chat={chat}
+                  active={activeChatId === chat.id}
+                  deleting={deletingId === chat.id}
+                  onSelect={() => navigate(`/chat/${chat.id}`)}
+                  onDelete={(e) => handleDelete(e, chat.id)}
+                />
+              ))
+            ) : (
+              grouped.map(([label, items]) => (
+                <div key={label} className="mb-1">
+                  <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
+                    {label}
+                  </p>
+                  {items.map((chat) => (
+                    <ChatItem
+                      key={chat.id}
+                      chat={chat}
+                      active={activeChatId === chat.id}
+                      deleting={deletingId === chat.id}
+                      onSelect={() => navigate(`/chat/${chat.id}`)}
+                      onDelete={(e) => handleDelete(e, chat.id)}
+                    />
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── COLLAPSED icon strip ──────────────────────────────── */}
+      <div className={cn(
+        'absolute inset-0 flex flex-col items-center py-3 gap-1 transition-[opacity,transform] duration-300 ease-in-out',
+        collapsed ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-3 pointer-events-none'
+      )}>
+        <IconBtn onClick={() => setCollapsed(false)} title="Expand">
+          <PanelLeft className="h-[18px] w-[18px]" />
+        </IconBtn>
+        <IconBtn onClick={() => navigate('/chat')} title="New chat">
+          <PlusIcon className="h-[18px] w-[18px]" />
+        </IconBtn>
+        <div className="flex-1" />
+        <IconBtn onClick={toggleTheme} title="Toggle theme">
+          {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+        </IconBtn>
       </div>
     </div>
+  );
+}
+
+/* ── ChatItem ─────────────────────────────────────────────────── */
+function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
+  return (
+    <div
+      className={cn(
+        'group relative flex w-full min-w-0 items-center overflow-hidden rounded-lg cursor-pointer',
+        active ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70'
+      )}
+      style={{ background: active ? 'var(--sidebar-accent)' : undefined }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--sidebar-accent)'; e.currentTarget.style.color = 'var(--sidebar-foreground)'; }}
+      onMouseLeave={e => { if (!active) { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; } }}
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect()}
+    >
+      <span className="block min-w-0 flex-1 truncate py-2 pl-3 pr-8 text-sm">
+        {chat.title || 'Untitled'}
+      </span>
+      <button
+        onClick={onDelete}
+        disabled={deleting}
+        tabIndex={-1}
+        title="Delete"
+        className={cn(
+          'absolute right-1.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-colors',
+          'opacity-0 group-hover:opacity-100 text-sidebar-foreground/50 hover:text-destructive hover:bg-destructive/10',
+          deleting && 'opacity-100 text-sidebar-foreground/50'
+        )}
+      >
+        {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+      </button>
+    </div>
+  );
+}
+
+/* ── IconBtn ──────────────────────────────────────────────────── */
+function IconBtn({ children, onClick, title, sm = false }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={cn(
+        'flex items-center justify-center rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors',
+        sm ? 'h-7 w-7' : 'h-9 w-9'
+      )}
+    >
+      {children}
+    </button>
   );
 }

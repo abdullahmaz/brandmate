@@ -2,66 +2,42 @@ import { useEffect, useRef } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
 import { Spinner } from './ui/spinner';
+import { Sparkles } from 'lucide-react';
 
-/**
- * Component for displaying chat messages
- */
 export function ChatArea({ messages, isLoading }) {
-  const scrollAreaRef = useRef(null);
-  const messagesEndRef = useRef(null);
+  const bottomRef = useRef(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center h-full px-6">
-        <Spinner variant="ellipsis" size={24} className="text-primary" />
-      </div>
-    );
-  }
-
   return (
-    <ScrollArea className="flex-1 h-full" ref={scrollAreaRef}>
-      <div className="mx-auto max-w-3xl py-6">
-        <div className="flex justify-center pb-2">
-          <span className="rounded-full bg-muted/70 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Today
-          </span>
-        </div>
-
-        {messages.map((message) => (
+    <ScrollArea className="h-full">
+      <div className="mx-auto max-w-2xl pb-6 pt-8">
+        {messages.map((msg) => (
           <ChatMessage
-            key={message.id}
-            role={message.role}
-            content={message.content}
-            timestamp={message.timestamp}
-            image={message.image}
-            html={message.html}
-            tool={message.tool}
+            key={msg.id}
+            role={msg.role}
+            content={msg.content}
+            timestamp={msg.timestamp}
+            image={msg.image}
+            html={msg.html}
+            tool={msg.tool}
           />
         ))}
-        
+
         {isLoading && (
-          <div className="flex gap-4 px-4 py-5">
-            <div className="h-10 w-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-semibold">AI</span>
+          <div className="flex gap-3 px-4 py-2">
+            <div className="mt-1 flex-shrink-0 h-7 w-7 rounded-full bg-primary flex items-center justify-center">
+              <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
             </div>
-            <div className="flex-1">
-              <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-1 text-sm font-semibold text-foreground">
-                  Assistant
-                  <span className="text-xs text-muted-foreground">is thinking</span>
-                  <Spinner variant="ellipsis" size={16} className="text-primary" />
-                </div>
-              </div>
+            <div className="flex items-center pt-1.5">
+              <Spinner variant="ellipsis" size={20} className="text-muted-foreground" />
             </div>
           </div>
         )}
-        
-        <div ref={messagesEndRef} />
+
+        <div ref={bottomRef} />
       </div>
     </ScrollArea>
   );

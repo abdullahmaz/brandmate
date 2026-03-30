@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
@@ -8,15 +8,19 @@ import { useChat, useCreateChat } from "../hooks/useChat";
 import { api } from "../services/api";
 import { queryKeys } from "../types/api";
 import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
-import { Button } from "./ui/button";
-import { PlusIcon, Search } from "lucide-react";
 
 const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [localMessages, setLocalMessages] = useState([]);
+  const [welcomed, setWelcomed] = useState(false); // true once first message is sent
   const abortControllerRef = useRef(null);
+
+  // Reset welcomed state when navigating to a fresh /chat page
+  useEffect(() => {
+    if (!chatId) setWelcomed(false);
+  }, [chatId]);
 
   // Only load chat data if we have a chatId and no local messages
   const { data: chatData, isLoading: chatLoading } = useChat(chatId);
@@ -123,6 +127,7 @@ const Chat = () => {
 
     // If no chatId, create a new chat first
     if (!chatId) {
+      setWelcomed(true); // trigger slide-down animation immediately
       try {
         // Create new chat using the mutation hook
         const chatData = await createChatMutation.mutateAsync({
@@ -223,72 +228,44 @@ const Chat = () => {
     sendMessageMutation.isPending ||
     createChatMutation.isPending ||
     chatLoading;
-  const nowLabel = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date());
-  const headerTitle = chatData?.title || "";
 
-  // Show welcome message when no chat is selected
+  const isWelcome = !chatId && !welcomed;
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-transparent">
-      <div className="border-b border-border/70 bg-card/80 px-6 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Today {nowLabel}
-            </p>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground line-clamp-2">
-                {headerTitle}
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex w-full items-center gap-3 lg:w-auto">
-            <Button
-              onClick={() => navigate("/chat")}
-              className="rounded-full bg-primary px-4 text-primary-foreground shadow-lg shadow-primary/20"
-            >
-              <PlusIcon className="mr-2 h-4 w-4" />
-              New chat
-            </Button>
-          </div>
-        </div>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {/* Messages — hidden (not removed) on welcome so layout is stable */}
+      <div
+        className={`flex-1 min-h-0 overflow-hidden transition-opacity duration-300 ${
+          isWelcome ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+      >
+        <ChatArea messages={messages} isLoading={isLoading} />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {!chatId ? (
-          <div className="flex h-full flex-col">
-            <div className="flex flex-1 items-center justify-center px-6">
-              <div className="text-center max-w-lg mx-auto space-y-3">
-                <h1 className="text-2xl font-bold text-foreground">
-                  Welcome to Brandmate
-                </h1>
-                <p className="text-muted-foreground">
-                  Start a new conversation by typing a message below.
-                </p>
-              </div>
-            </div>
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              isLoading={isLoading}
-              onStop={handleStop}
-              placeholder="Type your message to start a new conversation..."
-            />
-          </div>
-        ) : (
-          <div className="flex h-full flex-col">
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <ChatArea messages={messages} isLoading={isLoading} />
-            </div>
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              isLoading={isLoading}
-              onStop={handleStop}
-            />
-          </div>
-        )}
+      {/* Bottom panel: heading + input.
+          In welcome mode the whole panel is translated upward so it appears
+          vertically centered. On first send it transitions back to y=0. */}
+      <div
+        className="transition-transform duration-500 ease-[cubic-bezier(0.33,1,0.68,1)]"
+        style={{ transform: isWelcome ? 'translateY(calc(-50vh + 85px))' : 'translateY(0)' }}
+      >
+        {/* Welcome heading — fades out once welcomed */}
+        <div
+          className={`overflow-hidden text-center transition-all duration-300 ease-in-out ${
+            isWelcome ? 'max-h-16 opacity-100 pb-5' : 'max-h-0 opacity-0 pb-0'
+          }`}
+        >
+          <h1 className="text-2xl font-semibold text-foreground/80 select-none">
+            What can I help with?
+          </h1>
+        </div>
+
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
+          onStop={handleStop}
+          placeholder="Message Brandmate…"
+        />
       </div>
     </div>
   );

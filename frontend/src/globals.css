@@ -6,82 +6,86 @@
 
 :root {
   --font-size: 16px;
-  --background: #f5f7fb;
-  --foreground: #0f172a;
+  --background: #ffffff;
+  --foreground: #0d0d0d;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #0d0d0d;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #3b82f6;
-  --primary-foreground: #f8fafc;
-  --secondary: #eef2ff;
-  --secondary-foreground: #111827;
-  --muted: #e5e7eb;
-  --muted-foreground: #6b7280;
-  --accent: #e2e8f0;
-  --accent-foreground: #0f172a;
+  --popover-foreground: #0d0d0d;
+  --primary: #10a37f;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f7f8;
+  --secondary-foreground: #0d0d0d;
+  --muted: #ececec;
+  --muted-foreground: #666666;
+  --accent: #f7f7f8;
+  --accent-foreground: #0d0d0d;
   --destructive: #ef4444;
-  --destructive-foreground: #f8fafc;
-  --border: #e5e7eb;
-  --input: #f8fafc;
+  --destructive-foreground: #ffffff;
+  --border: #e5e5e5;
+  --input: #f7f7f8;
   --input-background: #ffffff;
-  --switch-background: #cbd5e1;
+  --switch-background: #e5e5e5;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #93c5fd;
-  --chart-1: #93c5fd;
-  --chart-2: #2563eb;
-  --chart-3: #60a5fa;
-  --chart-4: #c7d2fe;
-  --chart-5: #e0e7ff;
+  --ring: #10a37f;
+  --chart-1: #10a37f;
+  --chart-2: #0d8a6a;
+  --chart-3: #14b88e;
+  --chart-4: #a7e8d8;
+  --chart-5: #d4f4ec;
   --radius: 0.75rem;
-  --sidebar: #eef2f7;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #e8ecf5;
-  --sidebar-accent-foreground: #0f172a;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #93c5fd;
+  --sidebar: #f9f9f9;
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-primary: #10a37f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ececec;
+  --sidebar-accent-foreground: #0d0d0d;
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: #10a37f;
+  --user-bubble: #efefef;
+  --user-bubble-fg: #0d0d0d;
 }
 
 .dark {
-  --background: #0b1220;
-  --foreground: #e5e7eb;
-  --card: #0f172a;
-  --card-foreground: #e5e7eb;
-  --popover: #0f172a;
-  --popover-foreground: #e5e7eb;
-  --primary: #60a5fa;
-  --primary-foreground: #0b1220;
-  --secondary: #111827;
-  --secondary-foreground: #e5e7eb;
-  --muted: #1f2937;
-  --muted-foreground: #9ca3af;
-  --accent: #1f2937;
-  --accent-foreground: #e5e7eb;
+  --background: #212121;
+  --foreground: #ececec;
+  --card: #2f2f2f;
+  --card-foreground: #ececec;
+  --popover: #2f2f2f;
+  --popover-foreground: #ececec;
+  --primary: #10a37f;
+  --primary-foreground: #ffffff;
+  --secondary: #2f2f2f;
+  --secondary-foreground: #ececec;
+  --muted: #424242;
+  --muted-foreground: #8e8ea0;
+  --accent: #2f2f2f;
+  --accent-foreground: #ececec;
   --destructive: #f87171;
-  --destructive-foreground: #0b1220;
-  --border: #1f2937;
-  --input: #0f172a;
-  --input-background: #111827;
-  --switch-background: #1f2937;
-  --ring: #60a5fa;
+  --destructive-foreground: #212121;
+  --border: #383838;
+  --input: #2f2f2f;
+  --input-background: #2f2f2f;
+  --switch-background: #424242;
+  --ring: #10a37f;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: #60a5fa;
-  --chart-2: #3b82f6;
-  --chart-3: #93c5fd;
-  --chart-4: #1d4ed8;
-  --chart-5: #1e3a8a;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e5e7eb;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0b1220;
-  --sidebar-accent: #111827;
-  --sidebar-accent-foreground: #e5e7eb;
-  --sidebar-border: #1f2937;
-  --sidebar-ring: #60a5fa;
+  --chart-1: #10a37f;
+  --chart-2: #0d8a6a;
+  --chart-3: #14b88e;
+  --chart-4: #065f46;
+  --chart-5: #064e3b;
+  --sidebar: #171717;
+  --sidebar-foreground: #ececec;
+  --sidebar-primary: #10a37f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #212121;
+  --sidebar-accent-foreground: #ececec;
+  --sidebar-border: #2f2f2f;
+  --sidebar-ring: #10a37f;
+  --user-bubble: #303030;
+  --user-bubble-fg: #ececec;
 }
 
 @layer base {
@@ -93,18 +97,7 @@
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
       sans-serif;
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 25%),
-      radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.08), transparent 22%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9));
     min-height: 100vh;
-  }
-
-  .dark body {
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.12), transparent 25%),
-      radial-gradient(circle at 80% 0%, rgba(37, 99, 235, 0.12), transparent 22%),
-      linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(11, 18, 32, 0.98));
   }
 }
 
@@ -169,6 +162,31 @@ html {
 
 /* Custom classes for the chat interface */
 @layer components {
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.2s;
+  }
+  .sidebar-scroll:hover {
+    scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 20%, transparent) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: transparent;
+    transition: background 0.2s;
+  }
+  .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--sidebar-foreground) 20%, transparent);
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--sidebar-foreground) 35%, transparent);
+  }
   .loading-dot-1 {
     animation-delay: -0.3s;
   }
@@ -181,11 +199,4 @@ html {
     animation-delay: 0s;
   }
 
-  .glass-panel {
-    background: color-mix(in srgb, var(--card) 85%, transparent);
-    box-shadow:
-      0 12px 40px rgba(0, 0, 0, 0.08),
-      0 1px 0 rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(12px);
-  }
 }

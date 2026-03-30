@@ -106,57 +106,54 @@ export function HoverActions({
   }
 
   const isTextContent = type === CONTENT_TYPE_TEXT;
-  const actionsEl = (
-    <div className={`flex items-center gap-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${isTextContent ? 'flex-shrink-0 pt-0.5' : 'absolute right-2 top-2 z-10'}`}>
-      {showCopy && (
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="rounded-md bg-black/70 p-1.5 text-white hover:bg-black/85"
-          title={copied ? 'Copied' : 'Copy'}
-          aria-label={copied ? 'Copied' : 'Copy'}
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-      )}
-      {showDownload && (
-        <button
-          type="button"
-          onClick={handleDownload}
-          className="rounded-md bg-black/70 p-1.5 text-white hover:bg-black/85"
-          title="Download"
-          aria-label="Download"
-        >
-          <Download className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {showOpenInNewTab && (
-        <button
-          type="button"
-          onClick={handleOpenInNewTab}
-          className="rounded-md bg-black/70 p-1.5 text-white hover:bg-black/85"
-          title="Open in new tab"
-          aria-label="Open in new tab"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  );
 
+  // Text: copy button appears below message on hover
   if (isTextContent) {
     return (
-      <div className={`group relative flex items-start gap-2 ${className}`}>
-        <div className="min-w-0 flex-1">{children}</div>
-        {actionsEl}
+      <div className={`group ${className}`}>
+        {children}
+        <div className="flex items-center gap-0.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {showCopy && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              title={copied ? 'Copied' : 'Copy'}
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
+  // Image / website: action buttons float top-right, dark pill style
   return (
     <div className={`group relative ${className}`}>
       {children}
-      {actionsEl}
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {showDownload && (
+          <button
+            type="button"
+            onClick={handleDownload}
+            title="Download"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {showOpenInNewTab && (
+          <button
+            type="button"
+            onClick={handleOpenInNewTab}
+            title="Open in new tab"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
