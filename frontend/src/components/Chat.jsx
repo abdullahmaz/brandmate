@@ -1,24 +1,23 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
 import { ChatInput } from "./ChatInput";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useCreateChat } from "../hooks/useChat";
 import { api } from "../services/api";
-import { queryKeys } from "../types/api";
 import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
 
 const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [localMessages, setLocalMessages] = useState([]);
   const [welcomed, setWelcomed] = useState(false); // true once first message is sent
   const abortControllerRef = useRef(null);
 
-  // Reset welcomed state when navigating to a fresh /chat page
+  // Reset local state when switching chats
   useEffect(() => {
+    setLocalMessages([]);
     if (!chatId) setWelcomed(false);
   }, [chatId]);
 
@@ -32,17 +31,22 @@ const Chat = () => {
       abortControllerRef.current = new AbortController();
       return api.sendMessage(chatId, data, abortControllerRef.current.signal);
     },
-    onSuccess: (response, variables) => {
-      const { chatId } = variables;
-
-      // Clear AbortController
+    onSuccess: (response) => {
       abortControllerRef.current = null;
 
-      // Videos and images are now stored in S3 — always refresh from DB
-      setLocalMessages([]);
-      if (chatId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.chat(chatId) });
-      }
+      // Append assistant response directly to local state — no refetch needed
+      const assistantMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: response.data.message,
+        message_type: MESSAGE_TYPE_TEXT,
+        image: response.data.image || null,
+        html: response.data.html || null,
+        tool: response.data.tool || null,
+        timestamp: formatDistanceToNow(new Date(), { addSuffix: true }),
+      };
+
+      setLocalMessages((prev) => [...prev, assistantMessage]);
     },
     onError: (error) => {
       // Clear AbortController
@@ -226,8 +230,7 @@ const Chat = () => {
 
   const isLoading =
     sendMessageMutation.isPending ||
-    createChatMutation.isPending ||
-    chatLoading;
+    createChatMutation.isPending;
 
   const isWelcome = !chatId && !welcomed;
 
@@ -239,7 +242,13 @@ const Chat = () => {
           isWelcome ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
       >
-        <ChatArea messages={messages} isLoading={isLoading} />
+        {chatLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : (
+          <ChatArea messages={messages} isLoading={isLoading} />
+        )}
       </div>
 
       {/* Bottom panel: heading + input.
@@ -265,7 +274,7 @@ const Chat = () => {
 
         <ChatInput
           onSendMessage={handleSendMessage}
-          isLoading={isLoading}
+          isLoading={isLoading || chatLoading}
           onStop={handleStop}
           placeholder="Message Brandmate…"
         />
