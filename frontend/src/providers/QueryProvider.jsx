@@ -18,7 +18,13 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
     mutations: {
-      retry: 1,
+      // Do not retry aborted requests — retry would fire the same endpoint again (e.g. POST .../messages).
+      retry: (failureCount, error) => {
+        if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
+          return false;
+        }
+        return failureCount < 1;
+      },
     },
   },
 });

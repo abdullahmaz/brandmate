@@ -6,82 +6,88 @@
 
 :root {
   --font-size: 16px;
-  --background: #f5f7fb;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #3b82f6;
-  --primary-foreground: #f8fafc;
-  --secondary: #eef2ff;
-  --secondary-foreground: #111827;
-  --muted: #e5e7eb;
-  --muted-foreground: #6b7280;
-  --accent: #e2e8f0;
-  --accent-foreground: #0f172a;
-  --destructive: #ef4444;
-  --destructive-foreground: #f8fafc;
-  --border: #e5e7eb;
-  --input: #f8fafc;
-  --input-background: #ffffff;
-  --switch-background: #cbd5e1;
+  --background: #F5F8F5;
+  --foreground: #202b20;
+  --card: #F5F8F5;
+  --card-foreground: #182018;
+  --popover: #F5F8F5;
+  --popover-foreground: #182018;
+  --primary: #4E6450;
+  --primary-foreground: #F5F8F5;
+  --secondary: #E6EDE6;
+  --secondary-foreground: #182018;
+  --muted: #DAE5DA;
+  --muted-foreground: #556655;
+  --accent: #E6EDE6;
+  --accent-foreground: #182018;
+  --destructive: #B91C1C;
+  --destructive-foreground: #F5F8F5;
+  --border: #C2D1C2;
+  --input: #E6EDE6;
+  --input-background: #F5F8F5;
+  --switch-background: #C2D1C2;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #93c5fd;
-  --chart-1: #93c5fd;
-  --chart-2: #2563eb;
-  --chart-3: #60a5fa;
-  --chart-4: #c7d2fe;
-  --chart-5: #e0e7ff;
+  --ring: #4E6450;
+  --chart-1: #4E6450;
+  --chart-2: #758b74;
+  --chart-3: #8FA38E;
+  --chart-4: #C2D1C2;
+  --chart-5: #E6EDE6;
   --radius: 0.75rem;
-  --sidebar: #eef2f7;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #e8ecf5;
-  --sidebar-accent-foreground: #0f172a;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #93c5fd;
+  --sidebar: #ECF2EC;
+  --sidebar-foreground: #182018;
+  --sidebar-primary: #4E6450;
+  --sidebar-primary-foreground: #F5F8F5;
+  --sidebar-accent: #DAE5DA;
+  --sidebar-accent-foreground: #182018;
+  --sidebar-hover: #E3EBE3;
+  --sidebar-border: #C2D1C2;
+  --sidebar-ring: #4E6450;
+  --user-bubble: #DAE5DA;
+  --user-bubble-fg: #182018;
 }
 
 .dark {
-  --background: #0b1220;
-  --foreground: #e5e7eb;
-  --card: #0f172a;
-  --card-foreground: #e5e7eb;
-  --popover: #0f172a;
-  --popover-foreground: #e5e7eb;
-  --primary: #60a5fa;
-  --primary-foreground: #0b1220;
-  --secondary: #111827;
-  --secondary-foreground: #e5e7eb;
-  --muted: #1f2937;
-  --muted-foreground: #9ca3af;
-  --accent: #1f2937;
-  --accent-foreground: #e5e7eb;
-  --destructive: #f87171;
-  --destructive-foreground: #0b1220;
-  --border: #1f2937;
-  --input: #0f172a;
-  --input-background: #111827;
-  --switch-background: #1f2937;
-  --ring: #60a5fa;
+  --background: #131A13;
+  --foreground: #DCE8DC;
+  --card: #1B241B;
+  --card-foreground: #DCE8DC;
+  --popover: #1B241B;
+  --popover-foreground: #DCE8DC;
+  --primary: #758b74;
+  --primary-foreground: #131A13;
+  --secondary: #1B241B;
+  --secondary-foreground: #DCE8DC;
+  --muted: #243024;
+  --muted-foreground: #8A9E8A;
+  --accent: #1B241B;
+  --accent-foreground: #DCE8DC;
+  --destructive: #F87171;
+  --destructive-foreground: #131A13;
+  --border: #2C3C2C;
+  --input: #1B241B;
+  --input-background: #1B241B;
+  --switch-background: #2C3C2C;
+  --ring: #758b74;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: #60a5fa;
-  --chart-2: #3b82f6;
-  --chart-3: #93c5fd;
-  --chart-4: #1d4ed8;
-  --chart-5: #1e3a8a;
-  --sidebar: #0f172a;
-  --sidebar-foreground: #e5e7eb;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #0b1220;
-  --sidebar-accent: #111827;
-  --sidebar-accent-foreground: #e5e7eb;
-  --sidebar-border: #1f2937;
-  --sidebar-ring: #60a5fa;
+  --chart-1: #758b74;
+  --chart-2: #4E6450;
+  --chart-3: #8FA38E;
+  --chart-4: #2C3C2C;
+  --chart-5: #1B241B;
+  --sidebar: #0D140D;
+  --sidebar-foreground: #DCE8DC;
+  --sidebar-primary: #758b74;
+  --sidebar-primary-foreground: #131A13;
+  --sidebar-accent: #131A13;
+  --sidebar-accent-foreground: #DCE8DC;
+  --sidebar-hover: #101610;
+  --sidebar-border: #1B241B;
+  --sidebar-ring: #758b74;
+  --user-bubble: #1F2D1F;
+  --user-bubble-fg: #DCE8DC;
 }
 
 @layer base {
@@ -93,18 +99,7 @@
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
       sans-serif;
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 25%),
-      radial-gradient(circle at 80% 0%, rgba(99, 102, 241, 0.08), transparent 22%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9));
     min-height: 100vh;
-  }
-
-  .dark body {
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.12), transparent 25%),
-      radial-gradient(circle at 80% 0%, rgba(37, 99, 235, 0.12), transparent 22%),
-      linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(11, 18, 32, 0.98));
   }
 }
 
@@ -169,6 +164,34 @@ html {
 
 /* Custom classes for the chat interface */
 @layer components {
+  .font-brand {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.2s;
+  }
+  .sidebar-scroll:hover {
+    scrollbar-color: color-mix(in srgb, var(--sidebar-foreground) 20%, transparent) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: transparent;
+    transition: background 0.2s;
+  }
+  .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--sidebar-foreground) 20%, transparent);
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--sidebar-foreground) 35%, transparent);
+  }
   .loading-dot-1 {
     animation-delay: -0.3s;
   }
@@ -181,11 +204,102 @@ html {
     animation-delay: 0s;
   }
 
-  .glass-panel {
-    background: color-mix(in srgb, var(--card) 85%, transparent);
-    box-shadow:
-      0 12px 40px rgba(0, 0, 0, 0.08),
-      0 1px 0 rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(12px);
+  /* Dual-ring conic loader (chat “thinking” row) */
+  @keyframes chat-loading-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes chat-loading-spin-reverse {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  @keyframes chat-loading-core {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) scale(0.82);
+      opacity: 0.45;
+    }
+    50% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .chat-loading-spinner {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  .chat-loading-spinner__ring {
+    position: absolute;
+    border-radius: 50%;
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 0);
+  }
+
+  .chat-loading-spinner__ring--outer {
+    inset: 0;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 200deg,
+      color-mix(in srgb, var(--primary) 35%, transparent) 238deg,
+      var(--primary) 268deg,
+      color-mix(in srgb, var(--primary) 40%, transparent) 302deg,
+      transparent 330deg
+    );
+    animation: chat-loading-spin 1.2s cubic-bezier(0.55, 0.1, 0.3, 1) infinite;
+  }
+
+  .chat-loading-spinner__ring--inner {
+    inset: 5px;
+    opacity: 0.42;
+    background: conic-gradient(
+      from 120deg,
+      transparent 0deg,
+      transparent 190deg,
+      var(--muted-foreground) 248deg,
+      transparent 275deg
+    );
+    animation: chat-loading-spin-reverse 0.95s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+
+  .chat-loading-spinner__core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--primary);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-foreground) 25%, transparent);
+    animation: chat-loading-core 1.35s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-loading-spinner__ring--outer,
+    .chat-loading-spinner__ring--inner {
+      animation: none;
+    }
+    .chat-loading-spinner__ring--outer {
+      transform: rotate(140deg);
+    }
+    .chat-loading-spinner__ring--inner {
+      transform: rotate(-60deg);
+      opacity: 0.35;
+    }
+    .chat-loading-spinner__core {
+      animation: none;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 0.75;
+    }
   }
 }

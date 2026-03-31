@@ -1,27 +1,32 @@
 import { useMemo, useState } from 'react';
-import { Avatar, AvatarFallback } from './ui/avatar';
 import ReactMarkdown from 'react-markdown';
 import { HoverActions } from './HoverActions';
-import { CONTENT_TYPE_TEXT, CONTENT_TYPE_IMAGE, CONTENT_TYPE_WEBSITE, TOOL_CONVERSATION } from '../constants/toolTypes';
-
-function BillboardImage({ src, alt }) {
+import {
+  CONTENT_TYPE_TEXT,
+  CONTENT_TYPE_IMAGE,
+  CONTENT_TYPE_WEBSITE,
+  TOOL_CONVERSATION,
+  TOOL_IMAGE_GENERATION,
+  TOOL_WEBSITE_GENERATION,
+} from '../constants/toolTypes';
+function ImageBlock({ src, alt }) {
   const [status, setStatus] = useState('loading');
   return (
-    <div className="not-prose mt-2 mb-1 rounded-xl border border-border/60 overflow-hidden bg-muted/30 shadow-sm w-full max-w-sm">
+    <div className="mt-2 rounded-xl overflow-hidden bg-muted/20 w-full max-w-sm">
       {status === 'loading' && (
-        <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground animate-pulse">
-          Loading image…
+        <div className="h-40 flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+          Loading…
         </div>
       )}
       {status === 'error' && (
-        <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">
+        <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
           Image unavailable
         </div>
       )}
       <img
         src={src}
         alt={alt}
-        className={`w-full h-[240px] object-cover block ${status !== 'loaded' ? 'hidden' : ''}`}
+        className={`w-full max-h-[300px] object-cover ${status !== 'loaded' ? 'hidden' : ''}`}
         onLoad={() => setStatus('loaded')}
         onError={() => setStatus('error')}
       />
@@ -29,103 +34,118 @@ function BillboardImage({ src, alt }) {
   );
 }
 
-// Splits content on ![]() tokens and returns array of {type:'text'|'image', value/src/alt}
-function splitContentByImages(content) {
+function splitContent(content) {
   if (!content) return [{ type: 'text', value: content }];
   const parts = [];
-  const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = imgRegex.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', value: content.slice(lastIndex, match.index) });
-    }
-    parts.push({ type: 'image', alt: match[1], src: match[2] });
-    lastIndex = match.index + match[0].length;
+  const re = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let last = 0, m;
+  while ((m = re.exec(content)) !== null) {
+    if (m.index > last) parts.push({ type: 'text', value: content.slice(last, m.index) });
+    parts.push({ type: 'image', alt: m[1], src: m[2] });
+    last = m.index + m[0].length;
   }
-  if (lastIndex < content.length) {
-    parts.push({ type: 'text', value: content.slice(lastIndex) });
-  }
+  if (last < content.length) parts.push({ type: 'text', value: content.slice(last) });
   return parts;
 }
 
-/**
- * Component for rendering a single chat message
- */
 export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
-  const label = isUser ? 'You' : 'Assistant';
+  const isVideo = tool === 'video_generation' || tool === 'video';
+  const showTextCopy =
+    !isVideo && tool !== TOOL_IMAGE_GENERATION && tool !== TOOL_WEBSITE_GENERATION;
   const iframeSrcDoc = useMemo(() =>
-    html ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href]');if(!a)return;var href=a.getAttribute('href');if(href&&href.startsWith('#')){e.preventDefault();var el=document.querySelector(href);if(el)el.scrollIntoView({behavior:'smooth'});}else{e.preventDefault();}});<\/script>` : null,
+    html
+      ? html + `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href');if(h&&h.startsWith('#')){e.preventDefault();var el=document.querySelector(h);if(el)el.scrollIntoView({behavior:'smooth'});}else{e.preventDefault();}});<\/script>`
+      : null,
     [html]
   );
-  const contentParts = useMemo(() => splitContentByImages(content), [content]);
+  const parts = useMemo(() => splitContent(content), [content]);
 
-  // Determine download filename — videos are WEBP, everything else is PNG
-  const isVideo = tool === 'video_generation' || tool === 'video';
-  const imageDownloadFilename = isVideo ? 'video.webp' : 'image.png';  // ← new
-
-  return (
-    <div className="flex gap-4 px-4 py-5">
-      <Avatar className="h-10 w-10 flex-shrink-0">
-        <AvatarFallback className={isUser ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}>
-          {isUser ? 'U' : 'AI'}
-        </AvatarFallback>
-      </Avatar>
-
-      <div className="flex-1 min-w-0 space-y-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">{label}</span>
-          {timestamp && <span className="text-muted-foreground/80">{timestamp}</span>}
-        </div>
-
-        <div
-          className={`rounded-2xl border border-border/80 bg-card/90 px-4 py-3 shadow-sm backdrop-blur-sm ${
-            isUser ? 'shadow-primary/10' : 'shadow-black/5'
-          }`}
-        >
-          <HoverActions type={CONTENT_TYPE_TEXT} copyContent={content} enabled={!isUser}>
-            <div className="prose prose-sm max-w-none break-words leading-6 text-foreground dark:prose-invert">
-              {contentParts.map((part, i) =>
-                part.type === 'image'
-                  ? <BillboardImage key={i} src={part.src} alt={part.alt} />
-                  : <ReactMarkdown key={i}>{part.value}</ReactMarkdown>
-              )}
-            </div>
-          </HoverActions>
-
+  /* ── USER MESSAGE ─────────────────────────────────────────────── */
+  if (isUser) {
+    return (
+      <div className="flex justify-end px-4 py-2">
+        <div className="max-w-[75%] space-y-2">
+          <div
+            className="rounded-3xl px-4 py-3 text-sm leading-relaxed"
+            style={{ background: 'var(--user-bubble)', color: 'var(--user-bubble-fg)' }}
+          >
+            {parts.map((p, i) =>
+              p.type === 'image' ? (
+                <ImageBlock key={i} src={p.src} alt={p.alt} />
+              ) : (
+                <div key={i} className="prose prose-sm max-w-none dark:prose-invert break-words">
+                  <ReactMarkdown>{p.value}</ReactMarkdown>
+                </div>
+              )
+            )}
+          </div>
           {image && (
-            <div className="mt-3">
-              <HoverActions type={CONTENT_TYPE_IMAGE} downloadUrl={image} downloadFilename={imageDownloadFilename} className="w-fit" enabled={!isUser}>
-                <img
-                  src={image}
-                  alt={isVideo ? 'Generated video' : 'Generated content'}
-                  className="rounded-xl max-w-full max-h-[320px] object-contain"
-                />
-              </HoverActions>
-            </div>
-          )}
-
-          {html && (
-            <div className="mt-3 space-y-2">
-              <HoverActions type={CONTENT_TYPE_WEBSITE} downloadHtml={html} downloadFilename="landing-page.html" className="rounded-xl border border-border/80 overflow-hidden bg-white max-h-[320px] min-h-[200px] flex flex-col" enabled={!isUser}>
-                <iframe
-                  title="Landing page preview"
-                  srcDoc={iframeSrcDoc}
-                  sandbox="allow-same-origin allow-scripts"
-                  className="w-full flex-1 min-h-[400px] border-0"
-                />
-              </HoverActions>
-            </div>
-          )}
-
-          {tool && tool !== TOOL_CONVERSATION && (
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-[11px] text-accent-foreground/80">
-              <span className="font-medium text-foreground">Tool</span>
-              <span className="uppercase tracking-wide text-muted-foreground">{tool}</span>
-            </div>
+            <img
+              src={image}
+              alt="Uploaded"
+              className="rounded-xl max-w-full max-h-48 object-contain ml-auto"
+            />
           )}
         </div>
+      </div>
+    );
+  }
+
+  /* ── ASSISTANT MESSAGE ────────────────────────────────────────── */
+  return (
+    <div className="group flex px-4 py-2">
+      <div className="min-w-0 flex-1 space-y-2">
+        <HoverActions type={CONTENT_TYPE_TEXT} copyContent={showTextCopy ? content : null} enabled>
+          <div className="prose prose-sm max-w-none dark:prose-invert text-foreground break-words leading-relaxed">
+            {parts.map((p, i) =>
+              p.type === 'image' ? (
+                <ImageBlock key={i} src={p.src} alt={p.alt} />
+              ) : (
+                <ReactMarkdown key={i}>{p.value}</ReactMarkdown>
+              )
+            )}
+          </div>
+        </HoverActions>
+
+        {image && (
+          <HoverActions
+            type={CONTENT_TYPE_IMAGE}
+            downloadUrl={image}
+            downloadFilename={isVideo ? 'video.webp' : 'image.png'}
+            className="w-fit"
+            enabled
+          >
+            <img
+              src={image}
+              alt={isVideo ? 'Generated video' : 'Generated image'}
+              className="rounded-xl max-w-sm max-h-72 object-contain"
+            />
+          </HoverActions>
+        )}
+
+        {html && (
+          <HoverActions
+            type={CONTENT_TYPE_WEBSITE}
+            downloadHtml={html}
+            downloadFilename="landing-page.html"
+            className="rounded-xl border border-border/60 overflow-hidden bg-white"
+            enabled
+          >
+            <iframe
+              title="Preview"
+              srcDoc={iframeSrcDoc}
+              sandbox="allow-same-origin allow-scripts"
+              className="w-full min-h-[400px] border-0"
+            />
+          </HoverActions>
+        )}
+
+        {tool && tool !== TOOL_CONVERSATION && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {tool}
+          </span>
+        )}
       </div>
     </div>
   );
