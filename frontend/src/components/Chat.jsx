@@ -23,6 +23,37 @@ const Chat = () => {
   const abortControllerRef = useRef(null);
   const typewriterRef = useRef(null);
   const prevChatIdRef = useRef(chatId);
+  const geoCoordsRef = useRef(null);
+
+  const isNearMeQuery = useCallback((text) => {
+    if (!text) return false;
+    return /\b(near\s+me|near\s+my\s+location|close\s+to\s+me|around\s+me|nearby|my\s+location|current\s+location)\b/i.test(text);
+  }, []);
+
+  const getCurrentCoordinatesFromBrowser = useCallback(async () => {
+    if (geoCoordsRef.current) return geoCoordsRef.current;
+    if (!navigator.geolocation) return null;
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 300000,
+        });
+      });
+
+      const coords = {
+        lat: Number(position.coords.latitude),
+        lon: Number(position.coords.longitude),
+      };
+      geoCoordsRef.current = coords;
+      return coords;
+    } catch (error) {
+      console.warn("Could not determine current coordinates from browser location:", error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     if (typewriterRef.current) {
@@ -150,6 +181,10 @@ const Chat = () => {
 
   const buildPayload = async (message, imageFile, conversationHistory) => {
     let image_base64 = null;
+    let current_city = null;
+    let current_lat = null;
+    let current_lon = null;
+
     if (imageFile) {
       image_base64 = await new Promise((resolve) => {
         const reader = new FileReader();
@@ -157,7 +192,23 @@ const Chat = () => {
         reader.readAsDataURL(imageFile);
       });
     }
-    return { message, conversation_history: conversationHistory, image_base64 };
+
+    if (isNearMeQuery(message)) {
+      const coords = await getCurrentCoordinatesFromBrowser();
+      if (coords) {
+        current_lat = coords.lat;
+        current_lon = coords.lon;
+      }
+    }
+
+    return {
+      message,
+      conversation_history: conversationHistory,
+      image_base64,
+      current_city,
+      current_lat,
+      current_lon,
+    };
   };
 
   const handleSendMessage = async (message, imageFile = null) => {

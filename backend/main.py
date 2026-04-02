@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -23,7 +23,17 @@ from database_service import database_service
 from storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
 from video_generator import VideoGenerator  # ← new import
-from billboard_scraper import scrape_billboards, format_billboard_results, enrich_with_contact
+from billboard_scraper import (
+    scrape_billboards, 
+    format_billboard_results, 
+    enrich_with_contact,
+    detect_near_me_query,
+    get_city_for_query,
+    get_city_from_coordinates,
+    extract_city_from_text,
+    infer_ad_type_from_text,
+    should_trigger_billboard_search,
+)
 
 load_dotenv()
 
@@ -53,11 +63,17 @@ class ChatRequest(BaseModel):
     message: str
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
+    current_city: str | None = None
+    current_lat: float | None = None
+    current_lon: float | None = None
 
 class MessageRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
     image_base64: str | None = None  # ← new: base64-encoded image for I2V
+    current_city: str | None = None
+    current_lat: float | None = None
+    current_lon: float | None = None
 
 class ChatResponse(BaseModel):
     message: str
@@ -66,6 +82,37 @@ class ChatResponse(BaseModel):
     tool: str | None = None
     chat_id: str | None = None
     conversation_history: list[ChatMessage] = []
+
+
+def _extract_client_ip(http_request: Request) -> Optional[str]:
+    """Extract client IP, preferring proxy headers when available."""
+    forwarded_for = http_request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    real_ip = http_request.headers.get("x-real-ip", "")
+    if real_ip:
+        return real_ip.strip()
+    return http_request.client.host if http_request.client else None
+
+
+def _is_placeholder_city(city: str) -> bool:
+    """Return True for non-usable placeholder city values produced by the LLM."""
+    value = (city or "").strip().lower()
+    if not value:
+        return True
+    placeholders = {
+        "your city",
+        "city name",
+        "my city",
+        "current city",
+        "near me",
+        "unknown",
+        "n/a",
+        "none",
+        "null",
+    }
+    return value in placeholders
+
 
 async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
     """Fetch the most recent generated image from this chat as bytes for I2V."""
@@ -83,7 +130,17 @@ async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
         print(f"DEBUG: Failed to fetch reference image: {e}")
     return None
 
-async def process_message(llm_orchestrator, chat_id: str, message: str, conversation_history: list[ChatMessage], image_bytes: bytes = None) -> ChatResponse:  # ← added image_bytes
+async def process_message(
+    llm_orchestrator,
+    chat_id: str,
+    message: str,
+    conversation_history: list[ChatMessage],
+    image_bytes: bytes = None,
+    client_ip: str = None,
+    current_city: str = None,
+    current_lat: float = None,
+    current_lon: float = None,
+) -> ChatResponse:
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
         # Convert conversation history to list of dicts for LLM orchestrator
@@ -175,13 +232,39 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
             elif tool_name == "billboard_search":
                 city = result["parameters"].get("city", "")
                 ad_type = result["parameters"].get("ad_type", "billboard")
+
+                if _is_placeholder_city(city):
+                    city = ""
+
+                # Recover missed fields from raw text if tool params are incomplete.
                 if not city:
-                    response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad)."
+                    city = extract_city_from_text(message) or ""
+                if not ad_type or ad_type == "billboard":
+                    ad_type = infer_ad_type_from_text(message)
+                
+                # If city is empty or user said "near me", try geolocation
+                if not city and detect_near_me_query(message):
+                    if current_lat is not None and current_lon is not None:
+                        detected_city = get_city_from_coordinates(current_lat, current_lon)
+                        if detected_city:
+                            city = detected_city
+                            print(f"DEBUG: Using city from browser coordinates: {city}")
+                    elif current_city and not _is_placeholder_city(current_city):
+                        city = current_city.strip()
+                        print(f"DEBUG: Using city from browser geolocation: {city}")
+                    else:
+                        detected_city = get_city_for_query(message, client_ip)
+                        if detected_city:
+                            city = detected_city
+                            print(f"DEBUG: Using detected city from IP geolocation: {city}")
+                
+                if not city:
+                    response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad), or enable location access to use 'near me' search."
                 else:
                     try:
                         print(f"DEBUG: Scraping billboards — city={city}, ad_type={ad_type}")
                         scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
-                        enrich_with_contact(scrape_data.get("results", []), top_n=5)
+                        enrich_with_contact(scrape_data.get("results", []), top_n=3)
                         response_message = format_billboard_results(scrape_data, top_n=5)
                         print(f"DEBUG: Billboard scrape complete — {len(scrape_data.get('results', []))} results")
                     except Exception as scrape_err:
@@ -269,9 +352,44 @@ async def process_message(llm_orchestrator, chat_id: str, message: str, conversa
                 response_message = result["response"]
                 
         else:
-            # Generic conversation response
-            response_message = result["response"]
-            tool_used = "conversation"
+            # Fallback route: if LLM misses tool-call but user intent is billboard search.
+            if should_trigger_billboard_search(message):
+                city = extract_city_from_text(message) or ""
+                ad_type = infer_ad_type_from_text(message)
+                if not city and detect_near_me_query(message):
+                    if current_lat is not None and current_lon is not None:
+                        detected_city = get_city_from_coordinates(current_lat, current_lon)
+                        if detected_city:
+                            city = detected_city
+                            print(f"DEBUG: Using city from browser coordinates (fallback route): {city}")
+                    elif current_city and not _is_placeholder_city(current_city):
+                        city = current_city.strip()
+                        print(f"DEBUG: Using city from browser geolocation (fallback route): {city}")
+                    else:
+                        city = get_city_for_query(message, client_ip) or ""
+
+                if city:
+                    try:
+                        print(f"DEBUG: Billboard fallback scrape — city={city}, ad_type={ad_type}")
+                        scrape_data = scrape_billboards(city=city, ad_type=ad_type, max_pages=2)
+                        enrich_with_contact(scrape_data.get("results", []), top_n=3)
+                        response_message = format_billboard_results(scrape_data, top_n=5)
+                        tool_used = "billboard_search"
+                    except Exception as scrape_err:
+                        print(f"Billboard fallback scrape error: {scrape_err}")
+                        response_message = (
+                            f"I tried to search for {ad_type} advertising spaces in {city} on adbuq.com, "
+                            f"but encountered an issue: {scrape_err}. "
+                            f"You can search directly at https://www.adbuq.com/"
+                        )
+                        tool_used = "billboard_search"
+                else:
+                    response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad), or set DEFAULT_BILLBOARD_CITY for near-me fallback in local development."
+                    tool_used = "billboard_search"
+            else:
+                # Generic conversation response
+                response_message = result["response"]
+                tool_used = "conversation"
         
         # Save assistant message
         try:
@@ -439,7 +557,7 @@ async def create_chat(request: ChatCreate):
         raise HTTPException(status_code=500, detail="Failed to create chat")
 
 @app.post("/api/chats/{chat_id}/messages", response_model=ChatResponse)
-async def send_message(chat_id: str, request: MessageRequest):
+async def send_message(chat_id: str, request: MessageRequest, http_request: Request):
     """Send a message to an existing chat"""
     try:
         # Decode base64 image to bytes if present (for I2V)
@@ -507,7 +625,20 @@ async def send_message(chat_id: str, request: MessageRequest):
                 chat_id=chat_id
             )
         
-        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history, image_bytes)
+        # Extract client IP for geolocation
+        client_ip = _extract_client_ip(http_request)
+        
+        return await process_message(
+            llm_orchestrator,
+            chat_id,
+            request.message,
+            request.conversation_history,
+            image_bytes,
+            client_ip,
+            request.current_city,
+            request.current_lat,
+            request.current_lon,
+        )
         
     except HTTPException:
         raise
@@ -516,7 +647,7 @@ async def send_message(chat_id: str, request: MessageRequest):
         raise HTTPException(status_code=500, detail="Failed to send message")
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, http_request: Request):
     try:
         # Get LLM (loads on first use). If loading, ask user to wait.
         llm_orchestrator, llm_status = get_llm()
@@ -610,7 +741,20 @@ async def chat(request: ChatRequest):
                 chat_id=chat_id
             )
         
-        return await process_message(llm_orchestrator, chat_id, request.message, request.conversation_history)
+        # Extract client IP for geolocation
+        client_ip = _extract_client_ip(http_request)
+        
+        return await process_message(
+            llm_orchestrator,
+            chat_id,
+            request.message,
+            request.conversation_history,
+            None,
+            client_ip,
+            request.current_city,
+            request.current_lat,
+            request.current_lon,
+        )
         
     except Exception as e:
         print(f"Error in chat endpoint: {e}")

@@ -8,6 +8,10 @@ Search URL pattern: https://www.adbuq.com/search-results/?type[0]=TYPE&location[
 """
 
 import re
+import os
+import ipaddress
+import unicodedata
+import math
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Dict, Any, Optional
@@ -101,6 +105,302 @@ CITY_MAP: Dict[str, str] = {
     "taxila": "taxila",
 }
 
+# Approximate city centers (lat, lon) for robust coordinate fallback.
+CITY_COORDS: Dict[str, tuple[float, float]] = {
+    "islamabad": (33.6844, 73.0479),
+    "rawalpindi": (33.5651, 73.0169),
+    "lahore": (31.5204, 74.3587),
+    "karachi": (24.8607, 67.0011),
+    "faisalabad": (31.4504, 73.1350),
+    "multan": (30.1575, 71.5249),
+    "peshawar": (34.0151, 71.5249),
+    "quetta": (30.1798, 66.9750),
+    "hyderabad": (25.3960, 68.3578),
+    "gujranwala": (32.1877, 74.1945),
+}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in kilometers."""
+    r = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
+
+def _nearest_supported_city(latitude: float, longitude: float, max_distance_km: float = 120.0) -> Optional[str]:
+    """Return nearest supported city name for given coordinates."""
+    best_city = None
+    best_dist = float("inf")
+    for city_name, (lat, lon) in CITY_COORDS.items():
+        dist = _haversine_km(latitude, longitude, lat, lon)
+        if dist < best_dist:
+            best_dist = dist
+            best_city = city_name
+    if best_city and best_dist <= max_distance_km:
+        return best_city
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Geolocation and "near me" detection
+# ---------------------------------------------------------------------------
+
+def detect_near_me_query(query: str) -> bool:
+    """
+    Detect if the user's query contains "near me" or similar location references.
+    
+    Examples:
+      - "find me billboards near me"
+      - "billboards near my location"
+      - "advertising nearby"
+      - "find me some digital screens close to me"
+    """
+    query_lower = query.lower().strip()
+    near_me_patterns = [
+        r"\bnear\s+me\b",
+        r"\bnear\s+my\s+location\b",
+        r"\bclose\s+to\s+me\b",
+        r"\baround\s+me\b",
+        r"\bnearly\b",
+        r"\bnearby\b",
+        r"\bwhere\s+i\s+am\b",
+        r"\bmy\s+location\b",
+        r"\bmy\s+city\b",
+        r"\bhere\b",
+    ]
+    
+    for pattern in near_me_patterns:
+        if re.search(pattern, query_lower, re.IGNORECASE):
+            return True
+    return False
+
+
+def get_user_city_from_ip(client_ip: Optional[str] = None) -> Optional[str]:
+    """
+    Detect user's city from their IP address using multiple geolocation services.
+    
+    Parameters
+    ----------
+    client_ip : str, optional
+        The client's IP address. If None, the function will use a public IP detection service.
+    
+    Returns
+    -------
+    str or None
+        The city name (e.g. "Karachi", "Lahore") or None if detection fails.
+    """
+    def _is_local_or_private_ip(ip_value: Optional[str]) -> bool:
+        if not ip_value:
+            return True
+        ip_value = ip_value.strip().split(",")[0].strip()
+        try:
+            ip_obj = ipaddress.ip_address(ip_value)
+            return ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local
+        except ValueError:
+            return True
+
+    try:
+        # If no IP provided, get the user's public IP first
+        if not client_ip:
+            try:
+                ip_response = requests.get("https://api.ipify.org?format=json", timeout=2)
+                ip_response.raise_for_status()
+                client_ip = ip_response.json().get("ip")
+            except Exception as e:
+                print(f"[BillboardScraper] Failed to detect public IP: {e}")
+                return None
+        
+        if _is_local_or_private_ip(client_ip):
+            # If still no valid IP, return None (likely local testing)
+            print("[BillboardScraper] Could not determine public user IP for geolocation")
+            return None
+        
+        # Try primary geolocation service: ip-api.com
+        try:
+            geo_response = requests.get(
+                f"http://ip-api.com/json/{client_ip}?fields=city,country",
+                timeout=3
+            )
+            geo_response.raise_for_status()
+            data = geo_response.json()
+            
+            if data.get("status") == "success":
+                country = data.get("country", "")
+                city = data.get("city", "")
+                
+                # Verify this is a Pakistani location
+                if country and ("pakistan" in country.lower() or "PK" in country):
+                    print(f"[BillboardScraper] Detected user location (ip-api): {city}, {country}")
+                    return city
+        except Exception as e:
+            print(f"[BillboardScraper] Primary geolocation service failed: {e}")
+        
+        # Try fallback service: ipapi.co
+        try:
+            geo_response = requests.get(
+                f"https://ipapi.co/{client_ip}/json/",
+                timeout=3
+            )
+            geo_response.raise_for_status()
+            data = geo_response.json()
+            
+            country_code = data.get("country_code", "")
+            city = data.get("city", "")
+            
+            # Check if Pakistan (country code: PK)
+            if country_code.upper() == "PK" and city:
+                print(f"[BillboardScraper] Detected user location (ipapi): {city}, Pakistan")
+                return city
+        except Exception as e:
+            print(f"[BillboardScraper] Fallback geolocation service failed: {e}")
+        
+        print(f"[BillboardScraper] Geolocation successful but location is outside Pakistan")
+        return None
+            
+    except Exception as e:
+        print(f"[BillboardScraper] Geolocation failed: {e}")
+        return None
+
+
+def get_city_for_query(query: str, client_ip: Optional[str] = None) -> Optional[str]:
+    """
+    Determine the city for a billboard search based on user query.
+    
+    If the query contains "near me" or similar, uses geolocation to find the user's city.
+    Otherwise, returns None (letting the LLM extract the city normally).
+    
+    Parameters
+    ----------
+    query : str
+        The user's query/message
+    client_ip : str, optional
+        The client's IP address for geolocation
+    
+    Returns
+    -------
+    str or None
+        The detected city name, or None if not found
+    """
+    if detect_near_me_query(query):
+        print("[BillboardScraper] Detected 'near me' query, using geolocation...")
+        detected_city = get_user_city_from_ip(client_ip)
+        if detected_city:
+            return detected_city
+        fallback_city = os.getenv("DEFAULT_BILLBOARD_CITY", "").strip()
+        if fallback_city:
+            print(f"[BillboardScraper] Using DEFAULT_BILLBOARD_CITY fallback: {fallback_city}")
+            return fallback_city
+    return None
+
+
+def get_city_from_coordinates(latitude: float, longitude: float) -> Optional[str]:
+    """Resolve city from browser coordinates using reverse geocoding."""
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={
+                "format": "jsonv2",
+                "lat": latitude,
+                "lon": longitude,
+                "accept-language": "en",
+            },
+            headers={
+                "User-Agent": "Brandmate/1.0",
+                "Accept": "application/json",
+            },
+            timeout=4,
+        )
+        response.raise_for_status()
+        data = response.json()
+        address = data.get("address", {})
+        city = (
+            address.get("city")
+            or address.get("town")
+            or address.get("municipality")
+            or address.get("county")
+        )
+
+        # Try to map reverse-geocoded locality text to our supported city list
+        # (e.g. "Rawalpindi Tehsil" -> "rawalpindi").
+        city_candidates = [
+            city,
+            address.get("city_district"),
+            address.get("county"),
+            address.get("state_district"),
+            address.get("state"),
+            data.get("display_name"),
+        ]
+        for candidate in city_candidates:
+            if not candidate:
+                continue
+            # 1) Direct city mention match against supported names
+            matched_city = extract_city_from_text(candidate)
+            if matched_city:
+                print(f"[BillboardScraper] Resolved city from coordinates: {matched_city}")
+                return matched_city
+
+            # 2) Normalize arbitrary locality strings into supported slugs
+            normalized_slug = _normalise_city(candidate)
+            mapped_city = next((name for name, slug in CITY_MAP.items() if slug == normalized_slug), None)
+            if mapped_city:
+                print(f"[BillboardScraper] Resolved city from coordinates: {mapped_city}")
+                return mapped_city
+
+        country_code = (address.get("country_code") or "").upper()
+        if city and (not country_code or country_code == "PK"):
+            print(f"[BillboardScraper] Resolved city from coordinates (raw): {city}")
+            normalized_slug = _normalise_city(city)
+            mapped_city = next((name for name, slug in CITY_MAP.items() if slug == normalized_slug), None)
+            if mapped_city:
+                print(f"[BillboardScraper] Mapped raw coordinate city to supported city: {mapped_city}")
+                return mapped_city
+
+        # Final fallback: nearest known Pakistani city by coordinates.
+        nearest_city = _nearest_supported_city(latitude, longitude)
+        if nearest_city:
+            print(f"[BillboardScraper] Resolved city by nearest coordinate match: {nearest_city}")
+            return nearest_city
+    except Exception as e:
+        print(f"[BillboardScraper] Coordinate reverse geocoding failed: {e}")
+
+    return None
+
+
+def extract_city_from_text(text: str) -> Optional[str]:
+    """Extract a known city name from free-form user text."""
+    lowered = (text or "").lower()
+    for city in sorted(CITY_MAP.keys(), key=len, reverse=True):
+        if re.search(rf"\b{re.escape(city)}\b", lowered):
+            return city
+    return None
+
+
+def infer_ad_type_from_text(text: str) -> str:
+    """Infer media type from free-form user text using existing normalisation."""
+    lowered = (text or "").strip().lower()
+    if not lowered:
+        return "billboard"
+    return _normalise_type(lowered)
+
+
+def should_trigger_billboard_search(text: str) -> bool:
+    """Detect billboard intent even when LLM tool calling fails."""
+    lowered = (text or "").lower()
+    intent_terms = [
+        "billboard", "billboards", "hoarding", "ooh", "outdoor advertising",
+        "outdoor ad", "digital screen", "digital billboard", "smd", "pole sign",
+        "bus shelter", "bridge panel", "airport advertising", "physical advertising",
+    ]
+    return any(term in lowered for term in intent_terms) or detect_near_me_query(lowered)
+
 
 # ---------------------------------------------------------------------------
 # Normalisation helpers
@@ -124,8 +424,22 @@ def _normalise_city(raw: str) -> str:
     key = raw.strip().lower()
     if key in CITY_MAP:
         return CITY_MAP[key]
+    key_ascii = unicodedata.normalize("NFKD", key).encode("ascii", "ignore").decode("ascii").strip()
+    if key_ascii in CITY_MAP:
+        return CITY_MAP[key_ascii]
+
+    # Heuristic mapping for district/territory style names.
+    if "islamabad" in key or "islamabad" in key_ascii:
+        return CITY_MAP["islamabad"]
+    if "rawalpindi" in key or "rawalpindi" in key_ascii:
+        return CITY_MAP["rawalpindi"]
+    if "karachi" in key or "karachi" in key_ascii:
+        return CITY_MAP["karachi"]
+    if "lahore" in key or "lahore" in key_ascii:
+        return CITY_MAP["lahore"]
+
     # Auto-slugify: lowercase, replace spaces/special chars with hyphens
-    slug = re.sub(r"[^a-z0-9]+", "-", key).strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", key_ascii or key).strip("-")
     return slug
 
 
@@ -307,6 +621,15 @@ def scrape_billboards(
     """
     # Normalise inputs
     city_slug = _normalise_city(city)
+    if not city_slug:
+        return {
+            "results": [],
+            "total_found": 0,
+            "city": "",
+            "ad_type": ad_type,
+            "search_url": "",
+            "error": "Could not resolve city for search. Please provide a valid Pakistani city name.",
+        }
     type_slugs = [_normalise_type(t.strip()) for t in ad_type.split(",")]
     type_slugs = list(dict.fromkeys(type_slugs))  # deduplicate preserving order
 
@@ -411,7 +734,7 @@ def scrape_billboards(
     }
 
 
-def enrich_with_contact(results: List[Dict[str, Any]], top_n: int = 5) -> None:
+def enrich_with_contact(results: List[Dict[str, Any]], top_n: int = 5, timeout: int = 6) -> None:
     """
     Fetch detail pages for the first *top_n* results and inject the
     ``contact`` field in-place.  Results beyond *top_n* are left unchanged.
@@ -424,7 +747,7 @@ def enrich_with_contact(results: List[Dict[str, Any]], top_n: int = 5) -> None:
         if not url:
             continue
         try:
-            resp = session.get(url, timeout=15)
+            resp = session.get(url, timeout=timeout)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             detail_wrap = soup.find("div", class_=re.compile(r"property-detail-wrap", re.I))
