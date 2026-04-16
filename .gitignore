@@ -323,3 +323,5 @@ TextGeneration/compare_models.py
 TextGeneration/Overall Average Scores.txt
 
 .claude
+temp_auto_push.bat
+temp_interactive_push.bat
