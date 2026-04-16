@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
+import re
 import os
 import uvicorn
 import asyncio
@@ -114,13 +115,69 @@ def _is_placeholder_city(city: str) -> bool:
     return value in placeholders
 
 
+def _resolve_billboard_city(
+    message: str,
+    city: str,
+    client_ip: str = None,
+    current_city: str = None,
+    current_lat: float = None,
+    current_lon: float = None,
+) -> str:
+    """Resolve the city for billboard search with location taking precedence for near-me queries."""
+    near_me_query = detect_near_me_query(message)
+
+    if near_me_query:
+        if current_lat is not None and current_lon is not None:
+            detected_city = get_city_from_coordinates(current_lat, current_lon)
+            if detected_city:
+                print(f"DEBUG: Using city from browser coordinates: {detected_city}")
+                return detected_city
+
+        if current_city and not _is_placeholder_city(current_city):
+            detected_city = current_city.strip()
+            print(f"DEBUG: Using city from browser geolocation: {detected_city}")
+            return detected_city
+
+        detected_city = get_city_for_query(message, client_ip)
+        if detected_city:
+            print(f"DEBUG: Using detected city from IP geolocation: {detected_city}")
+            return detected_city
+
+    if city and not _is_placeholder_city(city):
+        return city.strip()
+
+    return extract_city_from_text(message) or ""
+
+
+def _message_requests_reference_image(message: str) -> bool:
+    """Heuristic to detect when user wants to animate an existing/attached image."""
+    text = (message or "").lower()
+    if not text:
+        return False
+    patterns = [
+        r"\bthis\s+image\b",
+        r"\bthat\s+image\b",
+        r"\bcurrent\s+image\b",
+        r"\bthis\s+photo\b",
+        r"\bthat\s+photo\b",
+        r"\bthis\s+picture\b",
+        r"\bthat\s+picture\b",
+        r"\banimate\s+it\b",
+        r"\buse\s+this\s+image\b",
+        r"\buse\s+that\s+image\b",
+        r"\bvideo\s+of\s+(this|that)\s+(image|photo|picture)\b",
+    ]
+    return any(re.search(p, text) for p in patterns)
+
+
 async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
-    """Fetch the most recent generated image from this chat as bytes for I2V."""
+    """Fetch the most recent non-video image-like asset from this chat for I2V."""
     try:
         messages = await database_service.get_messages(chat_id, limit=50)
-        # Walk backwards, find latest message with s3_url and IMAGE type
+        # Walk backwards and find latest message with an asset URL that is not a video.
+        # This includes assistant IMAGE outputs and user uploads stored as TEXT with s3_url.
         for msg in reversed(messages):
-            if msg.s3_url and msg.message_type == MessageType.IMAGE:
+            if msg.s3_url and msg.message_type != MessageType.VIDEO:
                 import requests as _req
                 resp = _req.get(msg.s3_url, timeout=30)
                 resp.raise_for_status()
@@ -235,28 +292,17 @@ async def process_message(
 
                 if _is_placeholder_city(city):
                     city = ""
-
-                # Recover missed fields from raw text if tool params are incomplete.
-                if not city:
-                    city = extract_city_from_text(message) or ""
                 if not ad_type or ad_type == "billboard":
                     ad_type = infer_ad_type_from_text(message)
-                
-                # If city is empty or user said "near me", try geolocation
-                if not city and detect_near_me_query(message):
-                    if current_lat is not None and current_lon is not None:
-                        detected_city = get_city_from_coordinates(current_lat, current_lon)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using city from browser coordinates: {city}")
-                    elif current_city and not _is_placeholder_city(current_city):
-                        city = current_city.strip()
-                        print(f"DEBUG: Using city from browser geolocation: {city}")
-                    else:
-                        detected_city = get_city_for_query(message, client_ip)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using detected city from IP geolocation: {city}")
+
+                city = _resolve_billboard_city(
+                    message=message,
+                    city=city,
+                    client_ip=client_ip,
+                    current_city=current_city,
+                    current_lat=current_lat,
+                    current_lon=current_lon,
+                )
                 
                 if not city:
                     response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad), or enable location access to use 'near me' search."
@@ -279,6 +325,7 @@ async def process_message(
                 description = result["parameters"].get("description", message)
                 video_type = result["parameters"].get("video_type", "promotional")
                 use_reference_image = result["parameters"].get("use_reference_image", False)
+                wants_reference_image = use_reference_image or _message_requests_reference_image(message)
                 try:
                     if image_bytes:
                         # User attached an image — always use it
@@ -288,7 +335,7 @@ async def process_message(
                             image_bytes=image_bytes,
                             video_type=video_type,
                         )
-                    elif use_reference_image:
+                    elif wants_reference_image:
                         # User referred to a previous image — fetch latest from DB
                         print(f"DEBUG: Routing to I2V (reference image from history)")
                         ref_image_bytes = await _fetch_latest_image_from_chat(chat_id)
@@ -354,19 +401,17 @@ async def process_message(
         else:
             # Fallback route: if LLM misses tool-call but user intent is billboard search.
             if should_trigger_billboard_search(message):
-                city = extract_city_from_text(message) or ""
+                city = ""
                 ad_type = infer_ad_type_from_text(message)
-                if not city and detect_near_me_query(message):
-                    if current_lat is not None and current_lon is not None:
-                        detected_city = get_city_from_coordinates(current_lat, current_lon)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using city from browser coordinates (fallback route): {city}")
-                    elif current_city and not _is_placeholder_city(current_city):
-                        city = current_city.strip()
-                        print(f"DEBUG: Using city from browser geolocation (fallback route): {city}")
-                    else:
-                        city = get_city_for_query(message, client_ip) or ""
+
+                city = _resolve_billboard_city(
+                    message=message,
+                    city=city,
+                    client_ip=client_ip,
+                    current_city=current_city,
+                    current_lat=current_lat,
+                    current_lon=current_lon,
+                )
 
                 if city:
                     try:
