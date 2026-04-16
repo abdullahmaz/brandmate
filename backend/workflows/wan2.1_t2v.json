@@ -2,7 +2,7 @@
   "3": {
     "inputs": {
       "seed": 1124860262857158,
-      "steps": 30,
+      "steps": 12,
       "cfg": 6,
       "sampler_name": "uni_pc",
       "scheduler": "simple",
@@ -74,7 +74,7 @@
   "28": {
     "inputs": {
       "filename_prefix": "ComfyUI",
-      "fps": 16,
+      "fps": 8,
       "lossless": false,
       "quality": 90,
       "method": "default",
@@ -122,7 +122,7 @@
     "inputs": {
       "width": 832,
       "height": 480,
-      "length": 192,
+      "length": 57,
       "batch_size": 1
     },
     "class_type": "EmptyHunyuanLatentVideo",

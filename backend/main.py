@@ -490,7 +490,7 @@ async def convert_video(url: str = Query(...)):
             result = subprocess.run(
                 [
                     ffmpeg_exe, "-y",
-                    "-framerate", "4",
+                    "-framerate", "8",
                     "-i", frame_pattern,
                     "-vcodec", "libx264",
                     "-pix_fmt", "yuv420p",

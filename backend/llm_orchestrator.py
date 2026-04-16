@@ -295,13 +295,13 @@ class LLMOrchestrator:
         
         Example of a good prompt: "Create a marketing_copy for a new summer lawn collection targeting modern Pakistani women. The content should be elegant and sophisticated, include cultural references to Eid and festive seasons, use relevant emojis and hashtags like #PakistaniFashion #LawnCollection, emphasize quality and craftsmanship. The collection features floral prints, pastel colors, and lightweight cotton fabric suitable for hot weather."
 
-        When users ask for videos, use:
+        When users ask for videos, expand their request into a rich, detailed description for the video model. Include: camera movement (slow pan, tracking shot, static, zoom), lighting (golden hour, soft studio light, dramatic shadows, natural daylight), color palette, subject motion and expression, background/environment details, and quality cues (4K, cinematic, high detail, smooth motion). If the video involves clothing or fashion, it MUST be Eastern clothing (shalwar kameez, kurta, lawn suits, lehenga, dupatta, etc.). Write it as a single vivid paragraph. Use:
         <video_generation>
-        {"parameters": {"description": "video description", "video_type": "promotional", "use_reference_image": false}}
+        {"parameters": {"description": "detailed cinematic description", "video_type": "promotional", "use_reference_image": false}}
 
-        If the user refers to a previously generated image ("that image", "this image", "animate it", "make a video of it", "use that photo"), set use_reference_image to true:
+        If the user refers to a previously generated image ("that image", "this image", "animate it", "make a video of it", "use that photo"), still write a rich description and set use_reference_image to true:
         <video_generation>
-        {"parameters": {"description": "video description", "video_type": "promotional", "use_reference_image": true}}
+        {"parameters": {"description": "detailed cinematic description", "video_type": "promotional", "use_reference_image": true}}
 
         When users ask for websites, use:
         <website_generation>
