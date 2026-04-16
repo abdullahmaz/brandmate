@@ -6,17 +6,16 @@ import os
 import random
 import shutil
 import time
+import urllib.parse
 import urllib.request
-import websocket  
+import websocket
 from pathlib import Path
 from typing import Optional
 import httpx
 
 from config import (
     COMFYUI_URL,
-    COMFYUI_ADDR,
     COMFYUI_CLIENT_ID,
-    COMFYUI_OUTPUT_PATH,
     LOCAL_VIDEO_DIR,
     WORKFLOWS_DIR,
     T2V_POSITIVE_NODE,
@@ -52,9 +51,10 @@ class VideoGenerator:
         return assigned_name
 
     def _generate_sync(self, workflow: dict) -> Optional[str]:
-        # 1. Connect WebSocket
+        # 1. Connect WebSocket (derive ws:// or wss:// from COMFYUI_URL so ngrok/HTTPS works)
+        ws_url = self.comfyui_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
         ws = websocket.WebSocket()
-        ws.connect(f"ws://{COMFYUI_ADDR}/ws?clientId={COMFYUI_CLIENT_ID}")
+        ws.connect(f"{ws_url}/ws?clientId={COMFYUI_CLIENT_ID}")
 
         # 2. Queue prompt
         print("DEBUG: Sending prompt to ComfyUI...")
@@ -78,9 +78,9 @@ class VideoGenerator:
                     break
         ws.close()
 
-        # 4. Lookup filename from history — target node 28 (SaveAnimatedWEBP)
+        # 4. Lookup output entry from history — target node 28 (SaveAnimatedWEBP)
         time.sleep(2)  # buffer for file writing
-        video_filename = None
+        video_info = None
         try:
             with urllib.request.urlopen(f"{self.comfyui_url}/history/{prompt_id}") as res:
                 history_response = json.loads(res.read())
@@ -90,24 +90,31 @@ class VideoGenerator:
                         node_output = history["outputs"]["28"]
                         for key in ["gifs", "images", "animated", "webp"]:
                             if key in node_output:
-                                video_filename = node_output[key][0]["filename"]
+                                entry = node_output[key][0]
+                                video_info = {
+                                    "filename": entry["filename"],
+                                    "subfolder": entry.get("subfolder", ""),
+                                    "type": entry.get("type", "output"),
+                                }
                                 break
         except Exception as e:
             print(f"DEBUG: History lookup failed: {e}")
 
-        if not video_filename:
+        if not video_info:
             print("DEBUG: Could not find output filename in history")
             return None
 
-        # 5. Copy file to local folder
-        src_path = os.path.join(COMFYUI_OUTPUT_PATH, video_filename)
+        # 5. Download file from ComfyUI /view (works for local OR remote/ngrok ComfyUI)
+        video_filename = video_info["filename"]
         dst_path = os.path.join(LOCAL_VIDEO_DIR, video_filename)
-        if os.path.exists(src_path):
-            shutil.copy(src_path, dst_path)
-            print(f"DEBUG: Video copied to: {dst_path}")
+        view_url = f"{self.comfyui_url}/view?{urllib.parse.urlencode(video_info)}"
+        try:
+            with urllib.request.urlopen(view_url) as res, open(dst_path, "wb") as f:
+                shutil.copyfileobj(res, f)
+            print(f"DEBUG: Video downloaded to: {dst_path}")
             return dst_path
-
-        print(f"DEBUG: Source file not found: {src_path}")
+        except Exception as e:
+            print(f"DEBUG: Download from /view failed: {e}")
         return None
 
     async def _run_generation(self, workflow: dict) -> str:
