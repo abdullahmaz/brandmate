@@ -321,3 +321,5 @@ TextGeneration/models/
 TextGeneration/evaluation_results/
 TextGeneration/compare_models.py
 TextGeneration/Overall Average Scores.txt
+
+.claude

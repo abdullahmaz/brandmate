@@ -1,0 +1,66 @@
+{
+  "_comment": "Fashion LoRA Training Configuration",
+  "model_settings": {
+    "base_model": "prompthero/openjourney",
+    "model_type": "stable_diffusion",
+    "image_size": 512
+  },
+  
+  "training_settings": {
+    "batch_size": 4,
+    "epochs": 20,
+    "learning_rate": 1e-4,
+    "weight_decay": 1e-2,
+    "max_grad_norm": 1.0,
+    "warmup_steps": 100,
+    "lr_scheduler": "cosine",
+    "mixed_precision": "fp16",
+    "val_split": 0.1,
+    "generate_samples": true,
+    "sample_interval": 500
+  },
+  
+  "lora_settings": {
+    "rank": 16,
+    "alpha": 32,
+    "dropout": 0.1,
+    "target_modules": {
+      "unet": ["to_k", "to_q", "to_v", "to_out.0", "proj_in", "proj_out", "ff.net.0.proj", "ff.net.2"],
+      "text_encoder": ["q_proj", "v_proj", "k_proj", "out_proj"]
+    }
+  },
+  
+  "data_settings": {
+    "data_root": "../data_backup",
+    "captions_root": "../captions",
+    "augmentation_multiplier": 2,
+    "augmentation_types": {
+      "normal": {
+        "rotation_range": 15,
+        "brightness_range": 0.2,
+        "contrast_range": 0.15,
+        "add_noise": false,
+        "add_blur": false
+      },
+      "strong": {
+        "rotation_range": 30,
+        "brightness_range": 0.4,
+        "contrast_range": 0.3,
+        "add_noise": true,
+        "add_blur": true
+      }
+    }
+  },
+  
+  "output_settings": {
+    "output_dir": "../models/fashion_lora",
+    "save_every": 2,
+    "checkpoint_format": "safetensors"
+  },
+  
+  "logging": {
+    "use_wandb": true,
+    "project_name": "fashion-stable-diffusion",
+    "log_every": 10
+  }
+}

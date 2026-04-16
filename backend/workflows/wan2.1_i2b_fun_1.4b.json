@@ -74,7 +74,7 @@
   "28": {
     "inputs": {
       "filename_prefix": "ComfyUI",
-      "fps": 4,
+      "fps": 8,
       "lossless": false,
       "quality": 90,
       "method": "default",
@@ -216,7 +216,7 @@
       "camera_pose": "Zoom Out",
       "width": 512,
       "height": 512,
-      "length": 49,
+      "length": 96,
       "speed": 1,
       "fx": 0.5,
       "fy": 0.5,

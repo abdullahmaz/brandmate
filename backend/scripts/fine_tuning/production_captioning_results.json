@@ -1,0 +1,25 @@
+{
+  "Winter_Women": {
+    "captioned": 1359,
+    "failed": 0,
+    "total": 1359
+  },
+  "Winter_Men": {
+    "captioned": 1213,
+    "failed": 0,
+    "total": 1213
+  },
+  "Summer_Women": {
+    "captioned": 1400,
+    "failed": 0,
+    "total": 1400
+  },
+  "Summer_Men": {
+    "captioned": 1245,
+    "failed": 0,
+    "total": 1245
+  },
+  "timestamp": "2025-10-31T01:41:24.299297",
+  "total_captioned": 5217,
+  "total_failed": 0
+}

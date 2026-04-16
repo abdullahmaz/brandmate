@@ -19,13 +19,13 @@ from model_loader import (
     offload_text_generator,
     load_llm_at_startup,
 )
-from database_service import database_service
-from storage_service import storage_service
+from services.database_service import database_service
+from services.storage_service import storage_service
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
-from video_generator import VideoGenerator  # ← new import
-from billboard_scraper import (
-    scrape_billboards, 
-    format_billboard_results, 
+from generators.video_generator import VideoGenerator
+from services.billboard_scraper import (
+    scrape_billboards,
+    format_billboard_results,
     enrich_with_contact,
     detect_near_me_query,
     get_city_for_query,

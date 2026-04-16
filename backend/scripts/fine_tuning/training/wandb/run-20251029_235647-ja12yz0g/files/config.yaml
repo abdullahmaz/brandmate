@@ -1,0 +1,124 @@
+_wandb:
+    value:
+        cli_version: 0.22.3
+        e:
+            0gcsj9ytn3mpsdpgtxazhop9wbqfrr9u:
+                args:
+                    - --data_root
+                    - ../data_backup
+                    - --captions_root
+                    - ../captions
+                    - --output_dir
+                    - ../models/fashion_lora
+                    - --model_id
+                    - prompthero/openjourney
+                    - --batch_size
+                    - "4"
+                    - --epochs
+                    - "10"
+                    - --learning_rate
+                    - "0.0001"
+                    - --lora_rank
+                    - "16"
+                    - --lora_alpha
+                    - "32"
+                    - --augment_multiplier
+                    - "3"
+                    - --use_wandb
+                codePath: fine_tuning\training\train_fashion_lora.py
+                codePathLocal: train_fashion_lora.py
+                cpu_count: 6
+                cpu_count_logical: 12
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "1000068870144"
+                        used: "105149595648"
+                email: abdullahmazhar150@gmail.com
+                executable: C:\Users\abdullah\AppData\Local\Programs\Python\Python313\python.exe
+                git:
+                    commit: 8a6dc6e6b103405241d1bae236dec8c8e87b8507
+                    remote: https://github.com/abdullahmaz/brandmate.git
+                gpu: NVIDIA GeForce RTX 5070
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 6144
+                      memoryTotal: "12820938752"
+                      name: NVIDIA GeForce RTX 5070
+                      uuid: GPU-0d6840d0-36e3-efa2-c1ca-84e33ae670cc
+                host: DESKTOP-KULSULI
+                memory:
+                    total: "33970917376"
+                os: Windows-11-10.0.26100-SP0
+                program: E:\Projects\brandmate\fine_tuning\training\train_fashion_lora.py
+                python: CPython 3.13.7
+                root: E:\Projects\brandmate\fine_tuning\training
+                startedAt: "2025-10-29T18:56:47.719246Z"
+                writerId: 0gcsj9ytn3mpsdpgtxazhop9wbqfrr9u
+        m: []
+        python_version: 3.13.7
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 83
+                - 98
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 53
+                - 71
+                - 83
+                - 98
+            "3":
+                - 16
+            "4": 3.13.7
+            "5": 0.22.3
+            "6": 4.56.2
+            "8":
+                - 3
+            "12": 0.22.3
+            "13": windows-amd64
+batch_size:
+    value: 4
+epochs:
+    value: 10
+generate_samples:
+    value: true
+learning_rate:
+    value: 0.0001
+lora_alpha:
+    value: 32
+lora_dropout:
+    value: 0.1
+lora_rank:
+    value: 16
+lr_scheduler:
+    value: cosine
+max_grad_norm:
+    value: 1
+mixed_precision:
+    value: fp16
+model_id:
+    value: prompthero/openjourney
+output_dir:
+    value: ../models/fashion_lora
+sample_interval:
+    value: 500
+save_every:
+    value: 2
+use_wandb:
+    value: true
+warmup_steps:
+    value: 100
+weight_decay:
+    value: 0.01

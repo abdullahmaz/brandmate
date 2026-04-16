@@ -99,19 +99,19 @@ def _load_llm():
 
 
 def _load_image_generator():
-    from image_generator import ImageGenerator
+    from generators.image_generator import ImageGenerator
     device = _image_device()
     return ImageGenerator(device=device)
 
 
 def _load_text_generator():
-    from text_generator import TextGenerator
+    from generators.text_generator import TextGenerator
     device = _text_device()
     return TextGenerator(device=device)
 
 
 def _load_website_generator():
-    from website_generator import WebsiteGenerator
+    from generators.website_generator import WebsiteGenerator
     device = _website_device()
     return WebsiteGenerator(device=device)
 
