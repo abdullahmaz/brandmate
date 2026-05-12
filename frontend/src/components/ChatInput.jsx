@@ -1,18 +1,30 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from './ui/button';
 import { ArrowUp, Square, Paperclip, X } from 'lucide-react';
 
-export function ChatInput({
-  onSendMessage,
-  isLoading = false,
-  onStop,
-  placeholder = 'Message Brandmate',
-}) {
+export const ChatInput = forwardRef(function ChatInput(
+  {
+    onSendMessage,
+    isLoading = false,
+    onStop,
+    placeholder = 'Sketch a brief — for an Eid drop, a campaign, a launch…',
+  },
+  ref,
+) {
   const [message, setMessage] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    setMessage: (text) => {
+      setMessage(text);
+      // focus after state flush
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    focus: () => textareaRef.current?.focus(),
+  }));
 
   const canSend = !!(message.trim() || imageFile) && !isLoading;
 
@@ -53,12 +65,12 @@ export function ChatInput({
       <div className="mx-auto max-w-2xl">
         <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={pickImage} />
 
-        <div className="rounded-2xl border border-border bg-input shadow-sm transition-shadow focus-within:shadow-md focus-within:border-ring/60">
+        <div className="editorial-input">
           {/* Image preview strip */}
           {imagePreview && (
             <div className="px-3 pt-3">
               <div className="relative inline-block">
-                <img src={imagePreview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-border/40" />
+                <img src={imagePreview} alt="Preview" className="h-20 w-20 rounded-md object-cover border border-border" />
                 <button
                   type="button"
                   onClick={() => { setImageFile(null); setImagePreview(null); }}
@@ -71,7 +83,7 @@ export function ChatInput({
           )}
 
           {/* Textarea */}
-          <div className="px-4 pt-3 pb-1">
+          <div className="px-4 pt-3.5 pb-1">
             <textarea
               ref={textareaRef}
               value={message}
@@ -80,29 +92,34 @@ export function ChatInput({
               placeholder={placeholder}
               disabled={isLoading}
               rows={1}
-              className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none leading-6 max-h-[200px]"
+              className="w-full resize-none bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground placeholder:font-brand-italic outline-none leading-6 max-h-[200px]"
             />
           </div>
 
           {/* Toolbar */}
           <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-            <Button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              size="icon"
-              variant="ghost"
-              disabled={isLoading}
-              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              title="Attach image"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                size="icon"
+                variant="ghost"
+                disabled={isLoading}
+                className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                title="Attach reference"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              <span className="font-brand-italic text-[11px] text-muted-foreground/70 select-none hidden sm:inline">
+                attach a swatch, sketch or reference
+              </span>
+            </div>
 
             {isLoading ? (
               <button
                 type="button"
                 onClick={onStop}
-                className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center hover:opacity-80 transition-opacity"
+                className="h-8 w-8 rounded-md bg-foreground text-background flex items-center justify-center hover:opacity-80 transition-opacity"
                 title="Stop"
               >
                 <Square className="h-3.5 w-3.5" />
@@ -112,7 +129,7 @@ export function ChatInput({
                 type="button"
                 onClick={submit}
                 disabled={!canSend}
-                className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed transition-all"
+                className="send-btn h-8 w-8 rounded-md flex items-center justify-center"
                 title="Send"
               >
                 <ArrowUp className="h-4 w-4" />
@@ -120,7 +137,11 @@ export function ChatInput({
             )}
           </div>
         </div>
+
+        <p className="mt-2 text-center font-brand-italic text-[11px] text-muted-foreground/65 select-none">
+          Brandmate stitches with AI. Review every cut before it ships.
+        </p>
       </div>
     </div>
   );
-}
+});

@@ -10,12 +10,12 @@ import {
   Sun,
   Moon,
   Search,
-  Gem,
 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
 import { useTheme } from './ThemeProvider';
 import { cn } from '../lib/utils';
 import { isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
+import { BrandMark } from './BrandMark';
 
 function groupChats(chats) {
   const groups = { Today: [], Yesterday: [], 'This week': [], 'This month': [], Older: [] };
@@ -58,55 +58,62 @@ export function ChatSidebar() {
   };
 
   return (
-    /* Outer shell transitions its width */
     <div
       className="relative flex-shrink-0 bg-sidebar border-r border-sidebar-border h-full overflow-hidden transition-[width] duration-300 ease-in-out"
-      style={{ width: collapsed ? '56px' : '260px' }}
+      style={{ width: collapsed ? '60px' : '272px' }}
     >
       {/* ── EXPANDED content ─────────────────────────────────── */}
       <div className={cn(
         'absolute inset-0 flex flex-col transition-[opacity,transform] duration-300 ease-in-out',
         collapsed ? 'opacity-0 -translate-x-3 pointer-events-none' : 'opacity-100 translate-x-0'
       )}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            <Gem className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-            <span className="font-brand text-base font-semibold text-sidebar-foreground select-none tracking-wide">
-              Brandmate
-            </span>
+        {/* Masthead */}
+        <div className="px-4 pt-4 pb-3 flex-shrink-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <BrandMark size={26} tone="duo" />
+              <div className="flex flex-col leading-none min-w-0">
+                <span className="font-brand text-[22px] font-semibold text-sidebar-foreground tracking-tight select-none">
+                  Brandmate
+                </span>
+                <span className="font-brand-italic text-[11px] text-sidebar-foreground/55 mt-0.5 select-none truncate">
+                  the eastern atelier, in pixels
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 flex-shrink-0 pt-1">
+              <IconBtn onClick={toggleTheme} title="Toggle theme" sm>
+                {theme === 'light' ? <Moon className="h-[14px] w-[14px]" /> : <Sun className="h-[14px] w-[14px]" />}
+              </IconBtn>
+              <IconBtn onClick={() => setCollapsed(true)} title="Collapse" sm>
+                <PanelLeftClose className="h-[14px] w-[14px]" />
+              </IconBtn>
+            </div>
           </div>
-          <div className="flex items-center gap-0.5">
-            <IconBtn onClick={toggleTheme} title="Toggle theme" sm>
-              {theme === 'light' ? <Moon className="h-[14px] w-[14px]" /> : <Sun className="h-[14px] w-[14px]" />}
-            </IconBtn>
-            <IconBtn onClick={() => setCollapsed(true)} title="Collapse" sm>
-              <PanelLeftClose className="h-[14px] w-[14px]" />
-            </IconBtn>
-          </div>
+          <hr className="rule-double mt-3" />
         </div>
 
         {/* New chat */}
         <div className="px-2 pb-1 flex-shrink-0">
           <button
             onClick={() => navigate('/chat')}
-            className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+            className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors border border-transparent hover:border-sidebar-border"
           >
             <PlusIcon className="h-4 w-4 flex-shrink-0" />
-            <span>New chat</span>
+            <span>New brief</span>
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-2 pb-2 flex-shrink-0">
+        <div className="px-2 pb-3 flex-shrink-0">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/50" />
             <input
               type="text"
-              placeholder="Search…"
+              placeholder="Search the archive…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-sidebar-border pl-8 pr-3 py-1.5 text-xs text-sidebar-foreground outline-none focus:border-ring/50 transition-colors"
+              className="w-full rounded-md border border-sidebar-border pl-8 pr-3 py-1.5 text-xs text-sidebar-foreground outline-none focus:border-ring/60 transition-colors"
               style={{ background: 'var(--sidebar-accent)', color: 'var(--sidebar-foreground)' }}
             />
           </div>
@@ -120,9 +127,9 @@ export function ChatSidebar() {
                 <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground/40" />
               </div>
             ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-sidebar-foreground/40">
-                <MessageSquare className="h-6 w-6" />
-                <p className="text-xs">{search ? 'No matches' : 'No chats yet'}</p>
+              <div className="flex flex-col items-center gap-2 py-12 text-sidebar-foreground/50">
+                <BrandMark size={28} tone="accent" />
+                <p className="font-brand-italic text-xs">{search ? 'Nothing matches' : 'No briefs yet'}</p>
               </div>
             ) : search.trim() ? (
               filtered.map((chat) => (
@@ -137,8 +144,8 @@ export function ChatSidebar() {
               ))
             ) : (
               grouped.map(([label, items]) => (
-                <div key={label} className="mb-1">
-                  <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/35 select-none">
+                <div key={label} className="mb-2">
+                  <p className="flourish-dot px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/45 select-none font-brand">
                     {label}
                   </p>
                   {items.map((chat) => (
@@ -156,6 +163,13 @@ export function ChatSidebar() {
             )}
           </div>
         </div>
+
+        {/* Footer signature */}
+        <div className="flex-shrink-0 px-4 py-2 border-t border-sidebar-border/60">
+          <p className="font-brand-italic text-[10px] text-sidebar-foreground/45 select-none">
+            est. <span className="font-brand">2026</span> · Islamabad
+          </p>
+        </div>
       </div>
 
       {/* ── COLLAPSED icon strip ──────────────────────────────── */}
@@ -163,10 +177,13 @@ export function ChatSidebar() {
         'absolute inset-0 flex flex-col items-center py-3 gap-1 transition-[opacity,transform] duration-300 ease-in-out',
         collapsed ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-3 pointer-events-none'
       )}>
+        <div className="pb-1.5">
+          <BrandMark size={22} tone="duo" />
+        </div>
         <IconBtn onClick={() => setCollapsed(false)} title="Expand">
           <PanelLeft className="h-[18px] w-[18px]" />
         </IconBtn>
-        <IconBtn onClick={() => navigate('/chat')} title="New chat">
+        <IconBtn onClick={() => navigate('/chat')} title="New brief">
           <PlusIcon className="h-[18px] w-[18px]" />
         </IconBtn>
         <div className="flex-1" />
@@ -183,8 +200,8 @@ function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
   return (
     <div
       className={cn(
-        'group relative flex w-full min-w-0 items-center overflow-hidden rounded-lg cursor-pointer mb-0.5',
-        active ? 'text-sidebar-foreground' : 'text-sidebar-foreground/70'
+        'group relative flex w-full min-w-0 items-center overflow-hidden rounded-md cursor-pointer mb-0.5',
+        active ? 'text-sidebar-foreground' : 'text-sidebar-foreground/75'
       )}
       style={{ background: active ? 'var(--sidebar-accent)' : undefined }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--sidebar-hover)'; e.currentTarget.style.color = 'var(--sidebar-foreground)'; }}
@@ -194,6 +211,12 @@ function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
       tabIndex={0}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect()}
     >
+      {active && (
+        <span
+          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2px] rounded-full"
+          style={{ background: 'var(--primary)' }}
+        />
+      )}
       <span className="block min-w-0 flex-1 truncate py-2 pl-3 pr-8 text-sm">
         {chat.title || 'Untitled'}
       </span>
@@ -221,7 +244,7 @@ function IconBtn({ children, onClick, title, sm = false }) {
       onClick={onClick}
       title={title}
       className={cn(
-        'flex items-center justify-center rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors',
+        'flex items-center justify-center rounded-md text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors',
         sm ? 'h-7 w-7' : 'h-9 w-9'
       )}
     >
