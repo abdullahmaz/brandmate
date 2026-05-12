@@ -3,11 +3,36 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChatArea } from "./ChatArea";
 import { ChatInput } from "./ChatInput";
+import { BrandMark } from "./BrandMark";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useCreateChat } from "../hooks/useChat";
 import { api } from "../services/api";
 import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
 import { queryKeys } from "../types/api";
+import { Shirt, Sparkles, Globe, Film } from "lucide-react";
+
+const PROMPT_SUGGESTIONS = [
+  {
+    icon: Shirt,
+    label: "Lookbook poster",
+    prompt: "Design a poster for my upcoming Eid lawn collection — pastel palette, soft summer light, festive but minimal.",
+  },
+  {
+    icon: Sparkles,
+    label: "Instagram caption",
+    prompt: "Write three Instagram captions for the launch of my hand-block-printed kurta line. Keep them warm, a little poetic.",
+  },
+  {
+    icon: Globe,
+    label: "Landing page",
+    prompt: "Build a single-page landing site for a bridal couture studio in Lahore. Maroon and gold, editorial photography style.",
+  },
+  {
+    icon: Film,
+    label: "Reel concept",
+    prompt: "Create a short promotional reel for my winter khaddar drop — slow pans, candlelight, the feel of an old haveli.",
+  },
+];
 
 // How fast to reveal text: characters per tick, tick interval in ms
 const CHARS_PER_TICK = 6;
@@ -293,6 +318,11 @@ const Chat = () => {
     sendMessageMutation.reset();
   };
 
+  const inputRef = useRef(null);
+  const handlePromptClick = useCallback((text) => {
+    inputRef.current?.setMessage?.(text);
+  }, []);
+
   const isPending = sendMessageMutation.isPending || createChatMutation.isPending;
   const isLoading = isPending || isTyping;
   const lastLocal = localMessages[localMessages.length - 1];
@@ -323,26 +353,61 @@ const Chat = () => {
 
       <div
         className="transition-transform duration-500 ease-[cubic-bezier(0.33,1,0.68,1)]"
-        style={{ transform: isWelcome ? "translateY(calc(-50vh + 85px))" : "translateY(0)" }}
+        style={{ transform: isWelcome ? "translateY(calc(-50vh + 280px))" : "translateY(0)" }}
       >
         <div
-          className={`overflow-hidden text-center transition-all duration-300 ease-in-out ${
-            isWelcome ? "max-h-28 opacity-100 pb-5" : "max-h-0 opacity-0 pb-0"
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isWelcome ? "max-h-[520px] opacity-100 pb-6" : "max-h-0 opacity-0 pb-0"
           }`}
         >
-          <h1 className="font-brand text-4xl font-semibold text-foreground/90 select-none tracking-wide">
-            What shall we create?
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground select-none">
-            Your AI partner for Eastern fashion & brand marketing
-          </p>
+          <div className="mx-auto max-w-2xl px-4">
+            <div className="text-center">
+              <div className="flex justify-center mb-4">
+                <BrandMark size={48} tone="duo" strokeWidth={1.4} />
+              </div>
+              <h1 className="font-brand text-5xl font-semibold text-foreground select-none tracking-tight leading-[1.05]">
+                What shall we <span className="font-brand-italic text-primary">stitch</span> today?
+              </h1>
+              <p className="mt-3 font-brand-italic text-[15px] text-muted-foreground select-none">
+                Your atelier for Eastern fashion — posters, captions, lookbooks, sites.
+              </p>
+              <hr className="rule-double mt-5 mb-2 mx-auto w-32" />
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {PROMPT_SUGGESTIONS.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => handlePromptClick(s.prompt)}
+                    className="prompt-card group motion-safe:animate-card-rise"
+                    style={{ animationDelay: `${80 + i * 60}ms` }}
+                  >
+                    <BrandMark size={18} tone="accent" className="prompt-card__corner" strokeWidth={1.6} />
+                    <div className="flex items-center gap-2 text-foreground">
+                      <Icon className="h-3.5 w-3.5 text-primary/80" />
+                      <span className="font-brand text-[13px] font-semibold tracking-[0.12em] uppercase">
+                        {s.label}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[13px] leading-snug text-muted-foreground">
+                      {s.prompt}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <ChatInput
+          ref={inputRef}
           onSendMessage={handleSendMessage}
           isLoading={isLoading || showChatSkeleton}
           onStop={handleStop}
-          placeholder="Message Brandmate…"
+          placeholder={isWelcome ? "Sketch a brief — for an Eid drop, a campaign, a launch…" : "Message Brandmate…"}
         />
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { HoverActions } from './HoverActions';
+import { BrandMark } from './BrandMark';
 import {
   CONTENT_TYPE_TEXT,
   CONTENT_TYPE_IMAGE,
@@ -9,17 +10,18 @@ import {
   TOOL_IMAGE_GENERATION,
   TOOL_WEBSITE_GENERATION,
 } from '../constants/toolTypes';
+
 function ImageBlock({ src, alt }) {
   const [status, setStatus] = useState('loading');
   return (
-    <div className="mt-2 rounded-xl overflow-hidden bg-muted/20 w-full max-w-sm">
+    <div className="mt-2 rounded-md overflow-hidden bg-muted/30 w-full max-w-sm border border-border/50">
       {status === 'loading' && (
-        <div className="h-40 flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+        <div className="h-40 flex items-center justify-center text-xs font-brand-italic text-muted-foreground animate-pulse">
           Loading…
         </div>
       )}
       {status === 'error' && (
-        <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
+        <div className="h-40 flex items-center justify-center text-xs font-brand-italic text-muted-foreground">
           Image unavailable
         </div>
       )}
@@ -48,6 +50,13 @@ function splitContent(content) {
   return parts;
 }
 
+const TOOL_LABELS = {
+  image_generation: 'image · atelier',
+  text_generation: 'copy · studio',
+  video_generation: 'reel · motion',
+  website_generation: 'site · house',
+};
+
 export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const isVideo = tool === 'video_generation' || tool === 'video';
@@ -67,8 +76,12 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
       <div className="flex justify-end px-4 py-2">
         <div className="max-w-[75%] space-y-2">
           <div
-            className="rounded-3xl px-4 py-3 text-sm leading-relaxed"
-            style={{ background: 'var(--user-bubble)', color: 'var(--user-bubble-fg)' }}
+            className="rounded-2xl rounded-tr-md px-4 py-3 text-[15px] leading-relaxed border"
+            style={{
+              background: 'var(--user-bubble)',
+              color: 'var(--user-bubble-fg)',
+              borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)',
+            }}
           >
             {parts.map((p, i) =>
               p.type === 'image' ? (
@@ -84,7 +97,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
             <img
               src={image}
               alt="Uploaded"
-              className="rounded-xl max-w-full max-h-48 object-contain ml-auto"
+              className="rounded-md max-w-full max-h-48 object-contain ml-auto border border-border/50"
             />
           )}
         </div>
@@ -94,10 +107,21 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
 
   /* ── ASSISTANT MESSAGE ────────────────────────────────────────── */
   return (
-    <div className="group flex px-4 py-2">
+    <div className="group flex gap-3 px-4 py-3">
+      {/* Signature mark — Brandmate's hand on every reply */}
+      <div
+        className="flex-shrink-0 mt-1 h-7 w-7 rounded-md flex items-center justify-center"
+        style={{
+          background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))',
+        }}
+      >
+        <BrandMark size={16} tone="duo" strokeWidth={1.6} />
+      </div>
+
       <div className="min-w-0 flex-1 space-y-2">
         <HoverActions type={CONTENT_TYPE_TEXT} copyContent={showTextCopy ? content : null} enabled>
-          <div className="prose prose-sm max-w-none dark:prose-invert text-foreground break-words leading-relaxed">
+          <div className="prose prose-sm max-w-none dark:prose-invert text-foreground break-words leading-relaxed prose-headings:font-brand prose-headings:font-semibold">
             {parts.map((p, i) =>
               p.type === 'image' ? (
                 <ImageBlock key={i} src={p.src} alt={p.alt} />
@@ -119,7 +143,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
             <img
               src={image}
               alt={isVideo ? 'Generated video' : 'Generated image'}
-              className="rounded-xl max-w-sm max-h-72 object-contain"
+              className="rounded-md max-w-sm max-h-72 object-contain border border-border/60"
             />
           </HoverActions>
         )}
@@ -129,7 +153,7 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
             type={CONTENT_TYPE_WEBSITE}
             downloadHtml={html}
             downloadFilename="landing-page.html"
-            className="rounded-xl border border-border/60 overflow-hidden bg-white"
+            className="rounded-md border border-border overflow-hidden bg-white"
             enabled
           >
             <iframe
@@ -142,8 +166,19 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
         )}
 
         {tool && tool !== TOOL_CONVERSATION && (
-          <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            {tool}
+          <span
+            className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[10px] font-brand-italic tracking-wider"
+            style={{
+              background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+              color: 'var(--muted-foreground)',
+              border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))',
+            }}
+          >
+            <span
+              className="inline-block h-1 w-1 rounded-full"
+              style={{ background: 'var(--mark-soft)' }}
+            />
+            {TOOL_LABELS[tool] || tool}
           </span>
         )}
       </div>

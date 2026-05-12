@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { ChatMessage } from './ChatMessage';
+import { BrandMark } from './BrandMark';
 import {
   CHAT_LOADING_WORDS,
   CHAT_LOADING_WORD_ROTATE_MS,
@@ -50,16 +51,27 @@ export function ChatArea({ messages, isLoading }) {
         ))}
 
         {isLoading && (
-          <div className="flex items-center gap-3 px-4 py-2">
-            <ChatLoadingSpinner />
-            <p
-              key={loadingWordIndex}
-              className="min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground motion-safe:animate-loading-line-in"
-              role="status"
-              aria-live="polite"
+          <div className="flex gap-3 px-4 py-3">
+            <div
+              className="flex-shrink-0 mt-1 h-7 w-7 rounded-md flex items-center justify-center"
+              style={{
+                background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))',
+              }}
             >
-              {CHAT_LOADING_WORDS[loadingWordIndex]}
-            </p>
+              <BrandMark size={16} tone="duo" strokeWidth={1.6} />
+            </div>
+            <div className="flex items-center gap-2 min-w-0 flex-1 pt-1">
+              <ChatLoadingSpinner />
+              <p
+                key={loadingWordIndex}
+                className="min-w-0 flex-1 font-brand-italic text-[15px] leading-relaxed text-muted-foreground motion-safe:animate-loading-line-in"
+                role="status"
+                aria-live="polite"
+              >
+                {CHAT_LOADING_WORDS[loadingWordIndex]}…
+              </p>
+            </div>
           </div>
         )}
 
