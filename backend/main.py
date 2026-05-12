@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -21,6 +21,8 @@ from model_loader import (
 )
 from services.database_service import database_service
 from services.storage_service import storage_service
+from services.supabase_client import supabase_client
+from services.auth import get_current_user, CurrentUser
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
 from generators.video_generator import VideoGenerator
 from services.billboard_scraper import (
@@ -114,10 +116,10 @@ def _is_placeholder_city(city: str) -> bool:
     return value in placeholders
 
 
-async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
+async def _fetch_latest_image_from_chat(db_client, chat_id: str) -> Optional[bytes]:
     """Fetch the most recent generated image from this chat as bytes for I2V."""
     try:
-        messages = await database_service.get_messages(chat_id, limit=50)
+        messages = await database_service.get_messages(db_client, chat_id, limit=50)
         # Walk backwards, find latest message with s3_url and IMAGE type
         for msg in reversed(messages):
             if msg.s3_url and msg.message_type == MessageType.IMAGE:
@@ -132,6 +134,7 @@ async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
 
 async def process_message(
     llm_orchestrator,
+    db_client,
     chat_id: str,
     message: str,
     conversation_history: list[ChatMessage],
@@ -291,7 +294,7 @@ async def process_message(
                     elif use_reference_image:
                         # User referred to a previous image — fetch latest from DB
                         print(f"DEBUG: Routing to I2V (reference image from history)")
-                        ref_image_bytes = await _fetch_latest_image_from_chat(chat_id)
+                        ref_image_bytes = await _fetch_latest_image_from_chat(db_client, chat_id)
                         if ref_image_bytes:
                             video_data = await video_generator.generate_i2v(
                                 prompt=description,
@@ -397,7 +400,7 @@ async def process_message(
             msg_metadata = None
             if tool_used == "website_generation" and response_html:
                 msg_metadata = {"html": response_html}
-            await database_service.create_message(MessageCreate(
+            await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content=response_message,
@@ -543,10 +546,14 @@ async def image_proxy(url: str = Query(...)):
 
 
 @app.post("/api/chats", response_model=ChatResponse)
-async def create_chat(request: ChatCreate):
-    """Create a new chat"""
+async def create_chat(
+    request: ChatCreate,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Create a new chat owned by the authenticated user."""
     try:
-        chat = await database_service.create_chat(request)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chat = await database_service.create_chat(db_client, user_id=user.id, chat_data=request)
         return ChatResponse(
             message="Chat created successfully",
             tool="chat_created",
@@ -557,9 +564,16 @@ async def create_chat(request: ChatCreate):
         raise HTTPException(status_code=500, detail="Failed to create chat")
 
 @app.post("/api/chats/{chat_id}/messages", response_model=ChatResponse)
-async def send_message(chat_id: str, request: MessageRequest, http_request: Request):
-    """Send a message to an existing chat"""
+async def send_message(
+    chat_id: str,
+    request: MessageRequest,
+    http_request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Send a message to a chat the user owns."""
     try:
+        db_client = supabase_client.client_for_user(user.access_token)
+
         # Decode base64 image to bytes if present (for I2V)
         image_bytes = None
         if request.image_base64:
@@ -567,8 +581,8 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
             image_bytes = _base64.b64decode(request.image_base64)
             print(f"DEBUG: Image received ({len(image_bytes)} bytes)")
 
-        # Verify chat exists
-        chat = await database_service.get_chat(chat_id)
+        # Verify chat exists AND belongs to caller (RLS scopes the lookup).
+        chat = await database_service.get_chat(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         
@@ -599,12 +613,12 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
                 except Exception as s3_err:
                     print(f"DEBUG: Failed to store user image: {s3_err}")
 
-            user_message = await database_service.create_message(MessageCreate(
+            user_message = await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
                 message_type=MessageType.TEXT,
-                 s3_url=user_image_s3
+                s3_url=user_image_s3
             ))
         except Exception as db_error:
             error_msg = str(db_error)
@@ -627,9 +641,10 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
         
         # Extract client IP for geolocation
         client_ip = _extract_client_ip(http_request)
-        
+
         return await process_message(
             llm_orchestrator,
+            db_client,
             chat_id,
             request.message,
             request.conversation_history,
@@ -639,7 +654,7 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
             request.current_lat,
             request.current_lon,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -647,8 +662,14 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
         raise HTTPException(status_code=500, detail="Failed to send message")
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, http_request: Request):
+async def chat(
+    request: ChatRequest,
+    http_request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
     try:
+        db_client = supabase_client.client_for_user(user.access_token)
+
         # Get LLM (loads on first use). If loading, ask user to wait.
         llm_orchestrator, llm_status = get_llm()
         if llm_status == "loading":
@@ -663,18 +684,18 @@ async def chat(request: ChatRequest, http_request: Request):
                     message="Service components failed to initialize. Please check server logs for details.",
                     tool="error"
                 )
-        
+
         # Get or create chat
         chat_id = request.chat_id
         try:
             if not chat_id:
                 # Create new chat
                 chat_data = ChatCreate(title=request.message[:50] + "..." if len(request.message) > 50 else request.message)
-                chat = await database_service.create_chat(chat_data)
+                chat = await database_service.create_chat(db_client, user_id=user.id, chat_data=chat_data)
                 chat_id = chat.id
-            
+
             # Save user message
-            user_message = await database_service.create_message(MessageCreate(
+            user_message = await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
@@ -707,7 +728,7 @@ async def chat(request: ChatRequest, http_request: Request):
                         print(f"S3 storage error: {s3_error}")
                         s3_url = generated_image
                     try:
-                        await database_service.create_message(MessageCreate(
+                        await database_service.create_message(db_client, MessageCreate(
                             chat_id=chat_id,
                             role=MessageRole.ASSISTANT,
                             content="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
@@ -729,7 +750,7 @@ async def chat(request: ChatRequest, http_request: Request):
                     # immediately reclaim VRAM when offload() calls gc.collect().
                     del image_generator
                     offload_image_generator()
-            await database_service.create_message(MessageCreate(
+            await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
@@ -743,9 +764,10 @@ async def chat(request: ChatRequest, http_request: Request):
         
         # Extract client IP for geolocation
         client_ip = _extract_client_ip(http_request)
-        
+
         return await process_message(
             llm_orchestrator,
+            db_client,
             chat_id,
             request.message,
             request.conversation_history,
@@ -755,7 +777,7 @@ async def chat(request: ChatRequest, http_request: Request):
             request.current_lat,
             request.current_lon,
         )
-        
+
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
         return ChatResponse(
@@ -764,20 +786,28 @@ async def chat(request: ChatRequest, http_request: Request):
         )
 
 @app.get("/api/chats", response_model=list[Chat])
-async def get_chats(user_id: str = None, limit: int = 50):
-    """Get all chats, optionally filtered by user_id"""
+async def get_chats(
+    limit: int = 50,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get all chats owned by the authenticated user (RLS-scoped)."""
     try:
-        chats = await database_service.get_chats(user_id=user_id, limit=limit)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chats = await database_service.get_chats(db_client, limit=limit)
         return chats
     except Exception as e:
         print(f"Error getting chats: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve chats")
 
 @app.get("/api/chats/{chat_id}", response_model=ChatWithMessages)
-async def get_chat(chat_id: str):
-    """Get a specific chat with all its messages"""
+async def get_chat(
+    chat_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get a specific chat with all its messages. RLS scopes ownership."""
     try:
-        chat = await database_service.get_chat_with_messages(chat_id)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chat = await database_service.get_chat_with_messages(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         return chat
@@ -788,20 +818,30 @@ async def get_chat(chat_id: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve chat")
 
 @app.get("/api/chats/{chat_id}/messages", response_model=list[MessageResponse])
-async def get_messages(chat_id: str, limit: int = 100):
-    """Get messages for a specific chat"""
+async def get_messages(
+    chat_id: str,
+    limit: int = 100,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get messages for a specific chat. RLS scopes ownership."""
     try:
-        messages = await database_service.get_messages(chat_id, limit=limit)
+        db_client = supabase_client.client_for_user(user.access_token)
+        messages = await database_service.get_messages(db_client, chat_id, limit=limit)
         return messages
     except Exception as e:
         print(f"Error getting messages: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve messages")
 
 @app.put("/api/chats/{chat_id}/title")
-async def update_chat_title(chat_id: str, title: str):
-    """Update chat title"""
+async def update_chat_title(
+    chat_id: str,
+    title: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Update chat title (caller must own the chat)."""
     try:
-        success = await database_service.update_chat_title(chat_id, title)
+        db_client = supabase_client.client_for_user(user.access_token)
+        success = await database_service.update_chat_title(db_client, chat_id, title)
         if not success:
             raise HTTPException(status_code=404, detail="Chat not found")
         return {"message": "Chat title updated successfully"}
@@ -812,19 +852,23 @@ async def update_chat_title(chat_id: str, title: str):
         raise HTTPException(status_code=500, detail="Failed to update chat title")
 
 @app.delete("/api/chats/{chat_id}")
-async def delete_chat(chat_id: str):
-    """Delete a chat and all its messages"""
+async def delete_chat(
+    chat_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete a chat and all its messages (caller must own the chat)."""
     try:
-        # Verify chat exists first
-        chat = await database_service.get_chat(chat_id)
+        db_client = supabase_client.client_for_user(user.access_token)
+
+        # Verify chat exists AND belongs to caller (RLS scopes the lookup).
+        chat = await database_service.get_chat(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
-        
-        # Delete the chat and all its messages
-        success = await database_service.delete_chat(chat_id)
+
+        success = await database_service.delete_chat(db_client, chat_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete chat")
-        
+
         return {"message": "Chat deleted successfully"}
     except HTTPException:
         raise

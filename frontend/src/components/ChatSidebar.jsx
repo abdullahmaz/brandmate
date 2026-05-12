@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   PlusIcon,
@@ -10,9 +10,12 @@ import {
   Sun,
   Moon,
   Search,
+  LogOut,
+  LogIn,
 } from 'lucide-react';
 import { useChats, useDeleteChat } from '../hooks/useChat';
 import { useTheme } from './ThemeProvider';
+import { useAuth } from '../providers/AuthProvider';
 import { cn } from '../lib/utils';
 import { isToday, isYesterday, isThisWeek, isThisMonth } from 'date-fns';
 import { BrandMark } from './BrandMark';
@@ -34,12 +37,27 @@ export function ChatSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { session, user, signOut, openLoginDialog } = useAuth();
 
   const { data: chats, isLoading } = useChats();
   const deleteChatMutation = useDeleteChat();
   const [deletingId, setDeletingId] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e) => {
+      if (!menuRef.current?.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [menuOpen]);
+
+  const initial = (user?.email?.[0] || '?').toUpperCase();
+  const displayName = user?.user_metadata?.full_name || user?.email || 'Signed in';
 
   const activeChatId = location.pathname.split('/chat/')[1] ?? null;
   const filtered = (chats || []).filter((c) =>
@@ -122,7 +140,14 @@ export function ChatSidebar() {
         {/* Chat list */}
         <div className="sidebar-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div className="w-full px-2 pb-3">
-            {isLoading ? (
+            {!session ? (
+              <div className="flex flex-col items-center gap-2 py-12 px-4 text-center text-sidebar-foreground/55">
+                <BrandMark size={28} tone="accent" />
+                <p className="font-brand-italic text-xs leading-snug">
+                  Sign in to see your saved briefs.
+                </p>
+              </div>
+            ) : isLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground/40" />
               </div>
@@ -164,11 +189,64 @@ export function ChatSidebar() {
           </div>
         </div>
 
-        {/* Footer signature */}
-        <div className="flex-shrink-0 px-4 py-2 border-t border-sidebar-border/60">
-          <p className="font-brand-italic text-[10px] text-sidebar-foreground/45 select-none">
-            est. <span className="font-brand">2026</span> · Islamabad
-          </p>
+        {/* Footer: user menu when signed in, sign-in CTA when not */}
+        <div ref={menuRef} className="relative flex-shrink-0 px-2 py-2 border-t border-sidebar-border/60">
+          {session ? (
+            <>
+              {menuOpen && (
+                <div
+                  className="absolute bottom-full left-2 right-2 mb-2 rounded-md border border-sidebar-border bg-sidebar shadow-lg overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={async () => { setMenuOpen(false); try { await signOut(); } catch {} }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-hover transition-colors"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Sign out</span>
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="w-full flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-sidebar-hover transition-colors"
+                title={user?.email || ''}
+              >
+                <span
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-[12px] font-brand font-semibold"
+                  style={{
+                    background: 'color-mix(in srgb, var(--accent) 25%, var(--sidebar-accent))',
+                    color: 'var(--mark)',
+                    border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--sidebar-border))',
+                  }}
+                >
+                  {initial}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left text-[13px] text-sidebar-foreground/85">
+                  {displayName}
+                </span>
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => openLoginDialog('signin')}
+                className="send-btn h-8 w-full rounded-md flex items-center justify-center gap-1.5 text-[13px]"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>Sign in</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openLoginDialog('signup')}
+                className="h-7 w-full rounded-md text-[12px] font-brand-italic text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-colors"
+              >
+                or create an account
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -190,6 +268,11 @@ export function ChatSidebar() {
         <IconBtn onClick={toggleTheme} title="Toggle theme">
           {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
         </IconBtn>
+        {!session && (
+          <IconBtn onClick={() => openLoginDialog('signin')} title="Sign in">
+            <LogIn className="h-4 w-4" />
+          </IconBtn>
+        )}
       </div>
     </div>
   );
