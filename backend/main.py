@@ -41,10 +41,11 @@ load_dotenv()
 
 app = FastAPI(title="Brandmate API", version="1.0.0")
 
-# CORS middleware
+# CORS middleware — accept any localhost/127.0.0.1 port for dev so a
+# bumped Vite port (5174, 5175, etc.) doesn't break the frontend.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # React dev server
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,8 +55,8 @@ app.add_middleware(
 print("Starting Brandmate server... (LLM loading at startup; Image/Text load on demand)")
 threading.Thread(target=load_llm_at_startup, daemon=True).start()
 
-# Video generator — stays loaded (no heavy model, just ComfyUI HTTP client)
-video_generator = VideoGenerator()  # ← new
+# Video generator — stays loaded (lightweight HTTP client)
+video_generator = VideoGenerator()
 
 class ChatMessage(BaseModel):
     role: str  # "system", "user", "assistant"
@@ -114,6 +115,34 @@ def _is_placeholder_city(city: str) -> bool:
         "null",
     }
     return value in placeholders
+
+
+def _resolve_near_me_city(
+    message: str,
+    current_city: str | None,
+    current_lat: float | None,
+    current_lon: float | None,
+    client_ip: Optional[str],
+) -> str:
+    """Resolve a city for near-me billboard searches with a hard Islamabad fallback."""
+    if current_lat is not None and current_lon is not None:
+        detected_city = get_city_from_coordinates(current_lat, current_lon)
+        if detected_city:
+            print(f"DEBUG: Using city from browser coordinates: {detected_city}")
+            return detected_city
+
+    if current_city and not _is_placeholder_city(current_city):
+        resolved_city = current_city.strip()
+        print(f"DEBUG: Using city from browser geolocation: {resolved_city}")
+        return resolved_city
+
+    detected_city = get_city_for_query(message, client_ip)
+    if detected_city:
+        print(f"DEBUG: Using detected city from IP geolocation: {detected_city}")
+        return detected_city
+
+    print("DEBUG: Near-me geolocation failed; falling back to Islamabad")
+    return "islamabad"
 
 
 async def _fetch_latest_image_from_chat(db_client, chat_id: str) -> Optional[bytes]:
@@ -245,21 +274,9 @@ async def process_message(
                 if not ad_type or ad_type == "billboard":
                     ad_type = infer_ad_type_from_text(message)
                 
-                # If city is empty or user said "near me", try geolocation
-                if not city and detect_near_me_query(message):
-                    if current_lat is not None and current_lon is not None:
-                        detected_city = get_city_from_coordinates(current_lat, current_lon)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using city from browser coordinates: {city}")
-                    elif current_city and not _is_placeholder_city(current_city):
-                        city = current_city.strip()
-                        print(f"DEBUG: Using city from browser geolocation: {city}")
-                    else:
-                        detected_city = get_city_for_query(message, client_ip)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using detected city from IP geolocation: {city}")
+                # If this is a near-me request, prefer live location over the LLM's city guess.
+                if detect_near_me_query(message):
+                    city = _resolve_near_me_city(message, current_city, current_lat, current_lon, client_ip)
                 
                 if not city:
                     response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad), or enable location access to use 'near me' search."
@@ -325,7 +342,7 @@ async def process_message(
                     tool_used = "video_generation"
                 except Exception as video_error:
                     print(f"Video generation error: {video_error}")
-                    response_message = "I encountered an issue generating the video. Please make sure ComfyUI is running and try again."
+                    response_message = "I encountered an issue generating the video. Please try again in a moment."
                 
             elif tool_name == "website_generation":
                 # One comprehensive prompt; website generator always produces a landing page.
@@ -359,17 +376,8 @@ async def process_message(
             if should_trigger_billboard_search(message):
                 city = extract_city_from_text(message) or ""
                 ad_type = infer_ad_type_from_text(message)
-                if not city and detect_near_me_query(message):
-                    if current_lat is not None and current_lon is not None:
-                        detected_city = get_city_from_coordinates(current_lat, current_lon)
-                        if detected_city:
-                            city = detected_city
-                            print(f"DEBUG: Using city from browser coordinates (fallback route): {city}")
-                    elif current_city and not _is_placeholder_city(current_city):
-                        city = current_city.strip()
-                        print(f"DEBUG: Using city from browser geolocation (fallback route): {city}")
-                    else:
-                        city = get_city_for_query(message, client_ip) or ""
+                if detect_near_me_query(message):
+                    city = _resolve_near_me_city(message, current_city, current_lat, current_lon, client_ip)
 
                 if city:
                     try:
@@ -487,7 +495,7 @@ async def convert_video(url: str = Query(...)):
                 frame.save(frame_path)
                 frame_paths.append(frame_path)
 
-            # Encode frames to MP4 with ffmpeg at 16fps (ComfyUI default)
+            # Encode frames to MP4 with ffmpeg at 8fps to match the source rate
             ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
             frame_pattern = os.path.join(tmpdir, "frame_%04d.png")
             result = subprocess.run(

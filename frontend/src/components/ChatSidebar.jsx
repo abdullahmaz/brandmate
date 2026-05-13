@@ -132,7 +132,7 @@ export function ChatSidebar() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-md border border-sidebar-border pl-8 pr-3 py-1.5 text-xs text-sidebar-foreground outline-none focus:border-ring/60 transition-colors"
-              style={{ background: 'var(--sidebar-accent)', color: 'var(--sidebar-foreground)' }}
+              style={{ background: 'var(--card)', color: 'var(--foreground)' }}
             />
           </div>
         </div>

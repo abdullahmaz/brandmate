@@ -5,103 +5,105 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ──────────────────────────────────────────────────────────────
-   Brandmate — Editorial palette inspired by South Asian textile
-   traditions. Warm ivory paper, deep ink, crimson, marigold.
+   Brandmate — Sage & Cream. Calm, natural pairing. Cream canvas,
+   sage primary action and sidebar, deeper sage derived for body
+   ink legibility. Dark mode inverts to deep forest with cream
+   highlights.
    ────────────────────────────────────────────────────────────── */
 :root {
   --font-size: 16px;
-  /* Paper & ink */
-  --background: #F7EFE2;          /* warm ivory / undyed cotton */
-  --foreground: #1B130D;          /* deep ink */
-  --card: #FBF5EA;
-  --card-foreground: #1B130D;
-  --popover: #FBF5EA;
-  --popover-foreground: #1B130D;
+  /* Canvas & ink */
+  --background: #F0EAD6;          /* cream */
+  --foreground: #2D3A2B;          /* deep sage ink — 12:1 on cream */
+  --card: #F9F4E5;                /* lighter cream — lifts from canvas */
+  --card-foreground: #2D3A2B;
+  --popover: #FFFFFF;             /* popovers stay white for clean lift */
+  --popover-foreground: #2D3A2B;
   /* Brand */
-  --primary: #8A2A2B;             /* gulnaar / pomegranate red */
-  --primary-foreground: #FBF5EA;
-  --secondary: #EFE3CE;           /* muted khaddar beige */
-  --secondary-foreground: #1B130D;
-  --muted: #EADFC8;
-  --muted-foreground: #6B5A47;
-  --accent: #C68A2E;              /* marigold / haldi gold */
-  --accent-foreground: #1B130D;
-  --destructive: #9C2A2A;
-  --destructive-foreground: #FBF5EA;
-  --border: #D9C7A7;
-  --input: #F1E6D0;
-  --input-background: #FBF5EA;
-  --switch-background: #D9C7A7;
+  --primary: #71826F;             /* sage */
+  --primary-foreground: #FFFFFF;
+  --secondary: #E5DFC9;           /* muted cream */
+  --secondary-foreground: #2D3A2B;
+  --muted: #EAE3CD;
+  --muted-foreground: #5C6B5A;    /* mid sage — 5:1 on cream */
+  --accent: #71826F;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C25450;
+  --destructive-foreground: #FFFFFF;
+  --border: #D9D2BB;
+  --input: #FFFFFF;
+  --input-background: #FFFFFF;
+  --switch-background: #D9D2BB;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #8A2A2B;
-  --chart-1: #8A2A2B;
-  --chart-2: #C68A2E;
-  --chart-3: #4F6A4E;
-  --chart-4: #6B5A47;
-  --chart-5: #D9C7A7;
+  --ring: #71826F;
+  --chart-1: #71826F;
+  --chart-2: #C4986C;             /* warm tan for chart variety */
+  --chart-3: #5C6B5A;
+  --chart-4: #A89D7C;
+  --chart-5: #E5DFC9;
   --radius: 0.5rem;
-  /* Sidebar — a touch darker, paper folded twice */
-  --sidebar: #EFE3CE;
-  --sidebar-foreground: #1B130D;
-  --sidebar-primary: #8A2A2B;
-  --sidebar-primary-foreground: #FBF5EA;
-  --sidebar-accent: #E4D4B6;
-  --sidebar-accent-foreground: #1B130D;
-  --sidebar-hover: #E9DCBF;
-  --sidebar-border: #CDB88E;
-  --sidebar-ring: #8A2A2B;
-  /* Message bubble — saffron-cream */
-  --user-bubble: #F3E2BE;
-  --user-bubble-fg: #1B130D;
+  /* Sidebar — light sage panel with deep sage text (6:1 contrast) */
+  --sidebar: #A8B5A0;
+  --sidebar-foreground: #2D3A2B;
+  --sidebar-primary: #71826F;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #92A18F;
+  --sidebar-accent-foreground: #2D3A2B;
+  --sidebar-hover: #92A18F;
+  --sidebar-border: #92A18F;
+  --sidebar-ring: #71826F;
+  /* User bubble — slightly darker cream, monochromatic with bg */
+  --user-bubble: #E5DFC9;
+  --user-bubble-fg: #2D3A2B;
   /* Brand mark tint */
-  --mark: #8A2A2B;
-  --mark-soft: #C68A2E;
+  --mark: #71826F;
+  --mark-soft: #5C6B5A;
 }
 
 .dark {
-  /* A dusk palette — aubergine night with gold lamp-light */
-  --background: #1A120E;
-  --foreground: #EFE3CE;
-  --card: #221814;
-  --card-foreground: #EFE3CE;
-  --popover: #221814;
-  --popover-foreground: #EFE3CE;
-  --primary: #D4A24C;             /* gold takes lead in dark */
-  --primary-foreground: #1A120E;
-  --secondary: #2A1F1A;
-  --secondary-foreground: #EFE3CE;
-  --muted: #2F231D;
-  --muted-foreground: #B59B7B;
-  --accent: #C68A2E;
-  --accent-foreground: #1A120E;
+  /* Inverted: deep forest ground with cream highlights */
+  --background: #1F2820;
+  --foreground: #F0EAD6;
+  --card: #2D3A2D;
+  --card-foreground: #F0EAD6;
+  --popover: #2D3A2D;
+  --popover-foreground: #F0EAD6;
+  --primary: #A8B5A0;             /* lighter sage on dark */
+  --primary-foreground: #1F2820;
+  --secondary: #2D3A2D;
+  --secondary-foreground: #F0EAD6;
+  --muted: #2D3A2D;
+  --muted-foreground: #9AA89A;
+  --accent: #F0EAD6;
+  --accent-foreground: #1F2820;
   --destructive: #E27676;
-  --destructive-foreground: #1A120E;
-  --border: #3A2A22;
-  --input: #221814;
-  --input-background: #221814;
-  --switch-background: #3A2A22;
-  --ring: #D4A24C;
+  --destructive-foreground: #1F2820;
+  --border: #3D4A3D;
+  --input: #2D3A2D;
+  --input-background: #2D3A2D;
+  --switch-background: #3D4A3D;
+  --ring: #A8B5A0;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: #D4A24C;
-  --chart-2: #C56F6F;
-  --chart-3: #8FA38E;
-  --chart-4: #6B5A47;
-  --chart-5: #2A1F1A;
-  --sidebar: #15100C;
-  --sidebar-foreground: #EFE3CE;
-  --sidebar-primary: #D4A24C;
-  --sidebar-primary-foreground: #1A120E;
-  --sidebar-accent: #1F1612;
-  --sidebar-accent-foreground: #EFE3CE;
-  --sidebar-hover: #221814;
-  --sidebar-border: #2A1F1A;
-  --sidebar-ring: #D4A24C;
-  --user-bubble: #2A1F18;
-  --user-bubble-fg: #F3E2BE;
-  --mark: #D4A24C;
-  --mark-soft: #C68A2E;
+  --chart-1: #A8B5A0;
+  --chart-2: #F0EAD6;
+  --chart-3: #71826F;
+  --chart-4: #C4986C;
+  --chart-5: #2D3A2D;
+  --sidebar: #161D17;
+  --sidebar-foreground: #F0EAD6;
+  --sidebar-primary: #A8B5A0;
+  --sidebar-primary-foreground: #1F2820;
+  --sidebar-accent: #2D3A2D;
+  --sidebar-accent-foreground: #F0EAD6;
+  --sidebar-hover: #2D3A2D;
+  --sidebar-border: #3D4A3D;
+  --sidebar-ring: #A8B5A0;
+  --user-bubble: #2D3A2D;
+  --user-bubble-fg: #F0EAD6;
+  --mark: #A8B5A0;
+  --mark-soft: #F0EAD6;
 }
 
 @layer base {

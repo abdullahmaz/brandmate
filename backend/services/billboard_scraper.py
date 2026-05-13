@@ -298,6 +298,8 @@ def get_city_for_query(query: str, client_ip: Optional[str] = None) -> Optional[
         if fallback_city:
             print(f"[BillboardScraper] Using DEFAULT_BILLBOARD_CITY fallback: {fallback_city}")
             return fallback_city
+        print("[BillboardScraper] Geolocation failed for 'near me' query, falling back to Islamabad")
+        return "islamabad"
     return None
 
 
