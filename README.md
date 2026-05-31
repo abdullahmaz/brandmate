@@ -6,7 +6,7 @@ An intelligent AI platform that automates end-to-end brand marketing for Eastern
 
 Brandmate in action:
 
-<video src="https://github.com/abdullahmaz/brandmate/releases/download/demo-assets/brandmate-demo.mp4" autoplay loop muted playsinline width="100%"></video>
+https://github.com/user-attachments/assets/23a55fdb-e498-4e94-84a3-47ef82dfe780
 
 
 ## 🌟 Features
