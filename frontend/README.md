@@ -1,514 +1,111 @@
-# Brandmate Frontend
+# Brandmate frontend
 
-Modern React frontend for the Brandmate AI-powered brand automation platform. Built with Vite, TailwindCSS, and ShadCN UI components for a beautiful, responsive chat interface.
+React 19 chat UI for the Brandmate platform. Built with Vite (rolldown), TailwindCSS,
+ShadCN, React Query, and Supabase auth.
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
-- npm or yarn
-- Backend server running on port 8000
-
-### Installation
-
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Start development server:**
-   ```bash
-   npm run dev
-   ```
-
-3. **Access the application:**
-   Open [http://localhost:5173](http://localhost:5173) in your browser
-
-## 🏗️ Project Structure
-
-```
-frontend/
-├── src/
-│   ├── components/           # React components
-│   │   ├── ui/              # ShadCN UI components
-│   │   │   ├── avatar.jsx   # User/AI avatar component
-│   │   │   ├── button.jsx   # Button component
-│   │   │   ├── card.jsx     # Card container component
-│   │   │   ├── input.jsx    # Input field component
-│   │   │   ├── scroll-area.jsx # Scrollable area component
-│   │   │   ├── separator.jsx # Visual separator component
-│   │   │   ├── spinner.jsx  # Loading spinner component
-│   │   │   └── textarea.jsx # Textarea component
-│   │   ├── Chat.jsx         # Main chat interface component
-│   │   ├── ChatArea.jsx     # Message display area
-│   │   ├── ChatInput.jsx    # Message input component
-│   │   ├── ChatMessage.jsx  # Individual message component
-│   │   ├── ChatSidebar.jsx  # Sidebar for chat history
-│   │   └── ThemeProvider.jsx # Theme context provider
-│   ├── hooks/               # Custom React hooks
-│   │   └── useChat.js       # Chat state management hook
-│   ├── services/            # API service layer
-│   │   └── api.js           # Axios-based backend API client
-│   ├── providers/           # React context providers
-│   │   └── QueryProvider.jsx # React Query provider
-│   ├── lib/
-│   │   └── utils.js         # Utility functions (cn, etc.)
-│   ├── App.jsx              # Main application component
-│   ├── main.jsx             # Application entry point
-│   ├── index.css            # Global styles
-│   └── globals.css          # Global CSS variables
-├── public/
-│   └── vite.svg             # Vite logo
-├── components.json          # ShadCN UI configuration
-├── package.json             # Dependencies and scripts
-├── tailwind.config.js       # TailwindCSS configuration
-├── postcss.config.js        # PostCSS configuration
-├── vite.config.js           # Vite configuration
-├── jsconfig.json            # JavaScript configuration
-└── README.md
-```
-
-## 🎨 Components
-
-### Core Components
-
-#### `Chat.jsx`
-Main chat interface component that manages:
-- Message state and history
-- API communication with backend
-- Loading states and error handling
-- Message formatting and timestamps
-
-**Props:** None (manages internal state)
-
-**Key Features:**
-- Real-time message updates
-- Error handling and fallbacks
-- Timestamp formatting with `date-fns`
-- Loading indicators
-
-#### `ChatArea.jsx`
-Message display area component that:
-- Renders message list
-- Handles auto-scrolling
-- Shows loading states
-- Manages empty states
-
-**Props:**
-- `messages` (Array): List of message objects
-- `isLoading` (Boolean): Loading state indicator
-
-**Key Features:**
-- Auto-scroll to bottom on new messages
-- Smooth scrolling animations
-- Empty state with welcome message
-- Loading animation with dots
-
-#### `ChatMessage.jsx`
-Individual message component that displays:
-- User and assistant messages
-- Generated images
-- Tool usage indicators
-- Timestamps
-
-**Props:**
-- `role` (String): 'user' or 'assistant'
-- `content` (String): Message text content
-- `timestamp` (String): Formatted timestamp
-- `image` (String): Base64 image data (optional)
-- `tool` (String): Tool used for generation (optional)
-
-**Key Features:**
-- Different styling for user vs assistant messages
-- Image display with proper sizing
-- Tool usage indicators
-- Responsive design
-
-#### `ChatInput.jsx`
-Message input component that handles:
-- Text input and submission
-- Loading states
-- Stop functionality
-- Keyboard shortcuts
-
-**Props:**
-- `onSendMessage` (Function): Callback for sending messages
-- `isLoading` (Boolean): Loading state
-- `onStop` (Function): Callback for stopping generation
-
-**Key Features:**
-- Auto-resize textarea
-- Enter to send, Shift+Enter for new line
-- Loading state with disabled input
-- Stop button during generation
-
-### Hooks
-
-#### `useChat.js`
-Custom React hook for chat state management:
-- Message history management
-- API communication
-- Loading states
-- Error handling
-
-### Providers
-
-#### `QueryProvider.jsx`
-React Query provider for efficient data fetching and caching:
-- Wraps the app with QueryClientProvider
-- Configures React Query defaults
-- Enables automatic refetching and caching
-
-### Services
-
-#### `api.js`
-Axios-based API client for backend communication:
-- **Base URL**: `http://localhost:8000`
-- **Features**: Request/response interceptors, error handling, logging
-- **Methods**: 
-  - `createChat()` - Create new chat
-  - `getChats()` - Get all chats
-  - `getChat(chatId)` - Get chat with messages
-  - `sendMessage(chatId, data)` - Send message to chat
-  - `getMessages(chatId)` - Get chat messages
-  - `updateChatTitle(chatId, title)` - Update chat title
-  - `deleteChat(chatId)` - Delete chat
-
-### UI Components (ShadCN)
-
-#### `Avatar.jsx`
-User and AI avatar component with fallback initials.
-
-#### `Button.jsx`
-Versatile button component with multiple variants and sizes.
-
-#### `Card.jsx`
-Container component for grouping related content.
-
-#### `Input.jsx`
-Form input component with consistent styling.
-
-#### `ScrollArea.jsx`
-Custom scrollable area with smooth scrolling.
-
-#### `Separator.jsx`
-Visual separator component for dividing content.
-
-#### `Spinner.jsx`
-Loading spinner component for async operations.
-
-#### `Textarea.jsx`
-Multi-line text input component.
-
-## 🎯 Features
-
-### Chat Interface
-- **Real-time Messaging**: Instant message updates and responses
-- **Image Display**: Shows generated images inline with messages
-- **Loading States**: Visual feedback during AI processing
-- **Error Handling**: Graceful error messages and fallbacks
-- **Responsive Design**: Works on desktop and mobile devices
-
-### User Experience
-- **Auto-scroll**: Automatically scrolls to new messages
-- **Keyboard Shortcuts**: Enter to send, Shift+Enter for new line
-- **Timestamps**: Relative time display (e.g., "2 minutes ago")
-- **Tool Indicators**: Shows which AI tool was used
-- **Empty States**: Welcome message when no conversations exist
-
-### Styling
-- **Dark/Light Theme**: Automatic theme detection
-- **TailwindCSS**: Utility-first CSS framework
-- **ShadCN UI**: High-quality component library
-- **Responsive**: Mobile-first responsive design
-- **Animations**: Smooth transitions and loading states
-
-## 🛠️ Development
-
-### Available Scripts
+## Quick start
 
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run preview      # Preview production build
-npm run lint         # Run ESLint
+cp .env.example .env          # add your Supabase URL + anon key
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
-### Development Server
+The backend should be running at `http://localhost:8000` — see [`../backend/README.md`](../backend/README.md).
 
-The development server runs on `http://localhost:5173` with:
-- Hot Module Replacement (HMR)
-- Fast refresh for React components
-- Automatic browser refresh on changes
-- Source maps for debugging
+## Environment
 
-### Building for Production
+```env
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+Supabase is used for authentication. The frontend grabs the user's JWT and attaches it as
+a `Bearer` token on every backend call; the backend validates against the same project.
+
+## Scripts
 
 ```bash
-npm run build
+npm run dev        # Vite dev server with HMR
+npm run build      # Production build to dist/
+npm run preview    # Preview the production build locally
+npm run lint       # ESLint
 ```
 
-This creates an optimized production build in the `dist/` directory with:
-- Minified JavaScript and CSS
-- Optimized assets
-- Tree-shaking for smaller bundle size
-- Source maps for debugging
+## Stack
 
-## ⚙️ Configuration
+- **React 19** with **React Router 7** for routing
+- **Vite** (replaced by `rolldown-vite` via npm override for faster builds)
+- **TailwindCSS 3** + **ShadCN UI** + `tailwindcss-animate`
+- **React Query 5** for server state, caching, and request dedup
+- **Axios** for HTTP with a request interceptor that injects the Supabase JWT
+- **react-markdown** + `@tailwindcss/typography` for rendering generated copy
+- **lucide-react** for icons, **date-fns** for relative timestamps
 
-### Vite Configuration (`vite.config.js`)
+## Structure
 
-```javascript
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  server: {
-    port: 5173,
-    // Note: API calls are handled directly via axios baseURL,
-    // not through Vite proxy
-  }
-})
+```
+src/
+├── App.jsx                   AuthProvider → Router → ChatSidebar + Chat
+├── components/
+│   ├── Chat.jsx              Main chat view, hooks into useChat
+│   ├── ChatSidebar.jsx       Chat history list, new-chat button
+│   ├── ChatArea.jsx          Scrollable message list with auto-scroll
+│   ├── ChatInput.jsx         Auto-resizing input, image upload, quality selector
+│   ├── ChatMessage.jsx       Renders text / image / video / HTML messages
+│   ├── HoverActions.jsx      Copy / download / convert-video actions
+│   ├── LoginDialog.jsx       Supabase email + OAuth login modal
+│   ├── BrandMark.jsx         Logo / wordmark
+│   ├── ThemeProvider.jsx     Light/dark theme context
+│   └── ui/                   ShadCN primitives
+├── hooks/
+│   ├── useChat.js            Chat state, send/abort, message normalization
+│   └── use-toast.js          Toast helper bound to <Toaster />
+├── providers/
+│   ├── AuthProvider.jsx      Supabase session, sign-in/out, login modal control
+│   └── QueryProvider.jsx     React Query client
+├── services/
+│   └── api.js                Axios client + endpoint methods
+├── lib/
+│   ├── supabaseClient.js     Supabase SDK init
+│   └── utils.js              `cn()` for class merging
+├── constants/
+│   ├── toolTypes.js          Tool name → display metadata
+│   └── loadingWords.js       Rotating loading copy
+└── types/api.js              JSDoc-style typedefs for API responses
 ```
 
-### TailwindCSS Configuration (`tailwind.config.js`)
+## API client
 
-```javascript
-module.exports = {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
-  theme: {
-    extend: {
-      colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        // ... more colors
-      }
-    }
-  },
-  plugins: [require("tailwindcss-animate")]
-}
-```
+`services/api.js` exposes a small typed client over the backend:
 
-### ShadCN UI Configuration (`components.json`)
+| Method                              | Endpoint                                |
+| ----------------------------------- | --------------------------------------- |
+| `api.createChat(data)`              | `POST   /api/chats`                     |
+| `api.getChats({ limit })`           | `GET    /api/chats`                     |
+| `api.getChat(chatId)`               | `GET    /api/chats/{chatId}`            |
+| `api.updateChatTitle(chatId, t)`    | `PUT    /api/chats/{chatId}/title`      |
+| `api.deleteChat(chatId)`            | `DELETE /api/chats/{chatId}`            |
+| `api.sendMessage(chatId, d, sig)`   | `POST   /api/chats/{chatId}/messages`   |
+| `api.getMessages(chatId, params)`   | `GET    /api/chats/{chatId}/messages`   |
 
-```json
-{
-  "style": "default",
-  "rsc": false,
-  "tsx": false,
-  "tailwind": {
-    "config": "tailwind.config.js",
-    "css": "src/index.css",
-    "baseColor": "slate",
-    "cssVariables": true
-  },
-  "aliases": {
-    "components": "src/components",
-    "utils": "src/lib/utils"
-  }
-}
-```
+The request interceptor reads `supabase.auth.getSession()` on every call — so requests
+fired outside the React tree still carry the right token. A 401 response forces a sign-out,
+which surfaces the login dialog.
 
-## 🎨 Styling
+Messages support extra fields the backend understands:
 
-### CSS Architecture
-- **Global Styles**: `index.css` and `globals.css`
-- **Component Styles**: Inline with TailwindCSS classes
-- **CSS Variables**: For consistent theming
-- **Responsive Design**: Mobile-first approach
+- `image_base64` — attach an image to drive image-to-video
+- `current_city`, `current_lat`, `current_lon` — used by the billboard "near me" flow
+- `quality_mode` — `"speed" | "balanced" | "quality"` for the video pipeline
 
-### Theme System
-- **CSS Variables**: Defined in `globals.css`
-- **Dark/Light Mode**: Automatic detection
-- **Color Palette**: Consistent color scheme
-- **Typography**: Inter font family
+## Build & deploy
 
-### Component Styling
-- **Utility Classes**: TailwindCSS for styling
-- **Component Variants**: ShadCN UI variants
-- **Responsive**: Mobile-first responsive design
-- **Animations**: Smooth transitions and hover effects
-
-## 🔌 API Integration
-
-### Backend Communication
-- **Base URL**: `http://localhost:8000`
-- **Client**: Axios with interceptors
-- **Error Handling**: Graceful error messages with fallbacks
-- **Loading States**: Visual feedback during requests
-- **Caching**: React Query for data caching and synchronization
-
-### API Endpoints Used
-
-**Chat Management:**
-- `POST /api/chats` - Create new chat
-- `GET /api/chats` - Get all chats
-- `GET /api/chats/{chat_id}` - Get chat with messages
-- `DELETE /api/chats/{chat_id}` - Delete chat
-
-**Messaging:**
-- `POST /api/chats/{chat_id}/messages` - Send message and get response
-- `GET /api/chats/{chat_id}/messages` - Get chat messages
-
-**Legacy:**
-- `POST /api/chat` - Legacy chat endpoint (still supported)
-
-### Message Format
-```javascript
-// Request (New API)
-{
-  "message": "Create a poster for my brand",
-  "conversation_history": [
-    { "role": "user", "content": "..." },
-    { "role": "assistant", "content": "..." }
-  ]
-}
-
-// Response
-{
-  "message": "I've generated an image for your request...",
-  "image": "https://bucket.s3.amazonaws.com/image.png", // or base64 data URL
-  "tool": "image_generation",
-  "chat_id": "uuid-here"
-}
-
-// Request (Legacy API)
-{
-  "message": "Create a poster for my brand",
-  "chat_id": "uuid-here",
-  "conversation_history": []
-}
-```
-
-## 📱 Responsive Design
-
-### Breakpoints
-- **Mobile**: < 640px
-- **Tablet**: 640px - 1024px
-- **Desktop**: > 1024px
-
-### Mobile Features
-- Touch-friendly interface
-- Responsive message bubbles
-- Optimized image display
-- Mobile keyboard handling
-
-## 🚀 Performance
-
-### Optimization Features
-- **Code Splitting**: Automatic code splitting with Vite
-- **Tree Shaking**: Removes unused code
-- **Image Optimization**: Efficient image handling
-- **Lazy Loading**: Components load as needed
-
-### Bundle Analysis
 ```bash
-npm run build
-# Check dist/ directory for optimized files
+npm run build       # outputs to dist/
+npm run preview     # smoke-test the production bundle
 ```
 
-## 🧪 Testing
-
-### Component Testing
-```bash
-# Install testing dependencies
-npm install --save-dev @testing-library/react @testing-library/jest-dom
-
-# Run tests
-npm test
-```
-
-### Manual Testing
-- Test all user interactions
-- Verify responsive design
-- Check error handling
-- Test image display
-
-## 🐛 Debugging
-
-### Development Tools
-- **React DevTools**: Browser extension
-- **Vite DevTools**: Built-in debugging
-- **Console Logging**: Debug information
-- **Source Maps**: For debugging production builds
-
-### Common Issues
-- **CORS Errors**: Check backend CORS configuration
-- **Image Display**: Verify base64 format
-- **Styling Issues**: Check TailwindCSS classes
-- **API Errors**: Check network tab in dev tools
-
-## 🚀 Deployment
-
-### Production Build
-```bash
-npm run build
-```
-
-### Deployment Options
-- **Static Hosting**: Vercel, Netlify, GitHub Pages
-- **CDN**: CloudFlare, AWS CloudFront
-- **Server**: Nginx, Apache
-
-### Environment Variables
-
-The frontend currently uses hardcoded API URL in `services/api.js`. For production deployment, you should:
-
-1. Create a `.env` file:
-```bash
-VITE_API_URL=http://localhost:8000
-VITE_APP_NAME=Brandmate
-```
-
-2. Update `services/api.js` to use environment variables:
-```javascript
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-### Code Style
-- Use Prettier for formatting
-- Follow React best practices
-- Use meaningful component names
-- Add comments for complex logic
-
-## 📞 Support
-
-For issues and questions:
-- Check the browser console for errors
-- Review the component documentation
-- Create an issue in the repository
-- Contact the development team
-
-## 📄 License
-
-This project is part of the Final Year Project at FAST NUCES, Islamabad.
-
-## 🙏 Acknowledgments
-
-- **Vite** for the fast build tool
-- **React** for the UI library
-- **TailwindCSS** for the styling framework
-- **ShadCN UI** for the component library
-- **React Query** for data fetching and caching
-- **React Router** for client-side routing
-- **Axios** for HTTP requests
-- **date-fns** for date utilities
-- **Lucide React** for beautiful icons
+The dev API base URL (`http://localhost:8000`) is hardcoded in `services/api.js`. For
+production, swap it to read from `import.meta.env.VITE_API_URL` and host the bundle on any
+static target (Vercel, Netlify, S3 + CloudFront, nginx).
