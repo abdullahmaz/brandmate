@@ -91,13 +91,13 @@ class LLMOrchestrator:
             },
             {
                 "name": "text_generation",
-                "description": "Generate written content like captions, descriptions, marketing copy, slogans for Eastern clothing brands",
+                "description": "Generate written content like captions, descriptions, marketing copy, slogans, emails, proposals, campaigns, and outreach material for Eastern clothing brands",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "prompt": {
                             "type": "string",
-                            "description": "A comprehensive prompt describing what text content to generate, including the type (caption, description, marketing_copy, slogan, proposal, etc.), the subject matter, target audience, tone, length, and any specific requirements"
+                            "description": "A comprehensive prompt describing what text content to generate, including the type (caption, description, marketing_copy, slogan, email, proposal, campaign plan, WhatsApp outreach, ad copy, etc.), the subject matter, target audience, tone, length, and any specific requirements"
                         }
                     },
                     "required": ["prompt"]
@@ -120,7 +120,7 @@ class LLMOrchestrator:
                         },
                         "use_reference_image": {
                             "type": "boolean",
-                            "description": "Set to true if the user wants to animate a previously generated image from this conversation. Set to false for text-to-video.",
+                            "description": "Set to true if the user wants to animate an attached/current/previously generated image from this conversation. Set to false only for pure text-to-video requests.",
                             "default": False
                         }
                     },
@@ -285,11 +285,19 @@ class LLMOrchestrator:
         
         You are Brandmate, an AI assistant for Eastern clothing brand marketing.
 
+        Guardrails:
+        - Use only these tool tags: <image_generation>, <text_generation>, <video_generation>, <website_generation>, <billboard_search>. Never invent new tool names or tags.
+        - If a request is harmful, illegal, hateful, explicit sexual content, or violent wrongdoing, refuse briefly and do not call any tool.
+        - Do not fabricate factual details (prices, availability, locations, contacts, results, or brand claims). If data is missing, ask a concise clarifying question or state assumptions explicitly.
+        - Keep outputs brand-safe, professional, and culturally respectful for Pakistani/Eastern clothing audiences.
+        - Protect privacy: do not request or reveal sensitive personal data unless strictly needed for the task.
+
         When users ask for images/posters/visuals, use:
         <image_generation>
         {"parameters": {"prompt": "description", "style": "eastern_clothing"}}
 
-        When users ask for marketing content like text/captions/copy/proposals, use:
+        When users ask for any writing deliverable, route it to text_generation. This includes captions, ad copy, campaign ideas, campaign plans, content calendars, client emails, outreach emails, proposals, pitch decks (text content), product descriptions, taglines, scripts, and similar marketing/business writing.
+        Use:
         <text_generation>
         {"parameters": {"prompt": "Prompt that describes the content to generate based on the user's request"}}
         
@@ -299,7 +307,7 @@ class LLMOrchestrator:
 
         For TEXT-TO-VIDEO (use_reference_image: false), expand the user's request into a rich, single-paragraph description. Include: camera movement (slow pan, tracking shot, static, zoom), lighting (golden hour, soft studio light, dramatic shadows, natural daylight), color palette, subject motion and expression, background/environment details, and quality cues (4K, cinematic, high detail, smooth motion). Use:
         <video_generation>
-        {"parameters": {"description": "detailed cinematic description", "video_type": "promotional", "use_reference_image": false}}
+        {"parameters": {"description": "faithful user intent with light enhancement", "video_type": "promotional", "use_reference_image": false}}
 
         For IMAGE-TO-VIDEO (use_reference_image: true) — when the user refers to a previously generated image ("that image", "this image", "animate it", "make a video of it", "use that photo") — write a SHORT description (1-2 sentences, max ~40 words). Describe ONLY motion and camera movement. DO NOT re-describe the clothing, model, scene, or background — those come from the reference image and re-describing them causes the video to drift away from the source. DO NOT add new objects, locations, or props that aren't in the image. Good examples: "The model walks forward toward the camera and gives a small twirl, then poses with hands on hips. Slow camera push-in.", "She turns her head slowly and smiles. Static camera.", "She walks across the frame from left to right at a relaxed pace. Camera tracks her gently.". Use:
         <video_generation>

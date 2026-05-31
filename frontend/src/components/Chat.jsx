@@ -348,7 +348,7 @@ const Chat = () => {
       };
       setLocalMessages((prev) => [...prev, userMessage]);
 
-      const history = messages.slice(-5).map((msg) => ({
+      const history = messages.slice(-3).map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));

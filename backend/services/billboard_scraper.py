@@ -294,7 +294,7 @@ def get_city_for_query(query: str, client_ip: Optional[str] = None) -> Optional[
         detected_city = get_user_city_from_ip(client_ip)
         if detected_city:
             return detected_city
-        fallback_city = os.getenv("DEFAULT_BILLBOARD_CITY", "").strip()
+        fallback_city = os.getenv("DEFAULT_BILLBOARD_CITY", "Rawalpindi").strip()
         if fallback_city:
             print(f"[BillboardScraper] Using DEFAULT_BILLBOARD_CITY fallback: {fallback_city}")
             return fallback_city
