@@ -247,6 +247,7 @@ fine_tuning/augmentation_preview/
 *.bmp
 *.tiff
 *.webp
+!assets/demo.gif
 
 # Model Files and Training Outputs
 checkpoints/
