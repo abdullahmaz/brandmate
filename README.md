@@ -8,7 +8,6 @@ Brandmate in action:
 
 <video src="https://github.com/abdullahmaz/brandmate/releases/download/demo-assets/brandmate-demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
-> If the video doesn't play inline, [watch it here](https://github.com/abdullahmaz/brandmate/releases/download/demo-assets/brandmate-demo.mp4) or on [Google Drive](https://drive.google.com/file/d/1nXBfCvq89REMfx3ikYDEu-HMGZO4AiB9/view?usp=drive_link).
 
 ## 🌟 Features
 
