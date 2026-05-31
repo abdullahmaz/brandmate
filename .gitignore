@@ -120,7 +120,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -163,7 +162,6 @@ cython_debug/
 .idea/
 
 # VS Code
-.vscode/
 *.code-workspace
 
 # Operating System
@@ -218,8 +216,6 @@ Temporary Items
 *secret*
 config_prod.py
 config_local.py
-.env.local
-.env.production
 
 # Fine-tuning Progress Files
 fine_tuning/progress/
@@ -247,6 +243,7 @@ fine_tuning/augmentation_preview/
 *.bmp
 *.tiff
 *.webp
+!assets/demo.gif
 
 # Model Files and Training Outputs
 checkpoints/
@@ -280,9 +277,6 @@ yarn.lock
 pnpm-lock.yaml
 
 # IDE and Editor Files
-.vscode/settings.json
-.vscode/launch.json
-.vscode/extensions.json
 *.swp
 *.swo
 *~
@@ -326,3 +320,5 @@ TextGeneration/Overall Average Scores.txt
 temp_auto_push.bat
 temp_interactive_push.bat
 branch_structure.json
+config.bat
+node_modules
