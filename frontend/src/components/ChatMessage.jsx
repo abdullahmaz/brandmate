@@ -60,6 +60,12 @@ const TOOL_LABELS = {
 export function ChatMessage({ role, content, timestamp, image, html, tool }) {
   const isUser = role === 'user';
   const isVideo = tool === 'video_generation' || tool === 'video';
+  // Decide rendering by actual file format: mp4/webm play in <video>;
+  // animated webp (older ComfyUI output) and everything else go in <img>.
+  const looksLikeVideoFile = image && (
+    image.startsWith('data:video/') ||
+    /\.(mp4|webm|mov)(\?|$)/i.test(image)
+  );
   const showTextCopy =
     !isVideo && tool !== TOOL_IMAGE_GENERATION && tool !== TOOL_WEBSITE_GENERATION;
   const iframeSrcDoc = useMemo(() =>
@@ -136,15 +142,26 @@ export function ChatMessage({ role, content, timestamp, image, html, tool }) {
           <HoverActions
             type={CONTENT_TYPE_IMAGE}
             downloadUrl={image}
-            downloadFilename={isVideo ? 'video.webp' : 'image.png'}
+            downloadFilename={
+              looksLikeVideoFile ? 'video.mp4' : isVideo ? 'video.webp' : 'image.png'
+            }
             className="w-fit"
             enabled
           >
-            <img
-              src={image}
-              alt={isVideo ? 'Generated video' : 'Generated image'}
-              className="rounded-md max-w-sm max-h-72 object-contain border border-border/60"
-            />
+            {looksLikeVideoFile ? (
+              <video
+                src={image}
+                controls
+                playsInline
+                className="rounded-md max-w-sm max-h-72 object-contain border border-border/60 bg-black"
+              />
+            ) : (
+              <img
+                src={image}
+                alt={isVideo ? 'Generated video' : 'Generated image'}
+                className="rounded-md max-w-sm max-h-72 object-contain border border-border/60"
+              />
+            )}
           </HoverActions>
         )}
 

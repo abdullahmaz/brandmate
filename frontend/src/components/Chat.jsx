@@ -6,6 +6,7 @@ import { ChatInput } from "./ChatInput";
 import { BrandMark } from "./BrandMark";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useCreateChat } from "../hooks/useChat";
+import { useAuth } from "../providers/AuthProvider";
 import { api } from "../services/api";
 import { MESSAGE_TYPE_TEXT, MESSAGE_TYPE_WEBSITE } from "../constants/toolTypes";
 import { queryKeys } from "../types/api";
@@ -42,9 +43,11 @@ const Chat = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { session, openLoginDialog } = useAuth();
   const [localMessages, setLocalMessages] = useState([]);
   const [welcomed, setWelcomed] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [qualityMode, setQualityMode] = useState('balanced');
   const abortControllerRef = useRef(null);
   const typewriterRef = useRef(null);
   const prevChatIdRef = useRef(chatId);
@@ -99,6 +102,17 @@ const Chat = () => {
     setIsTyping(false);
     if (!chatId) setWelcomed(false);
   }, [chatId, queryClient]);
+
+  // If we lose the session while looking at a specific chat (manual
+  // sign-out, token expiry, sign-out from another tab), bail back to
+  // the welcome screen so the user isn't staring at an empty pane.
+  useEffect(() => {
+    if (!session && chatId) {
+      navigate('/chat', { replace: true });
+      setLocalMessages([]);
+      setWelcomed(false);
+    }
+  }, [session, chatId, navigate]);
 
   useEffect(() => {
     return () => {
@@ -201,7 +215,40 @@ const Chat = () => {
         }))
       : [];
 
-    return localMessages.length > 0 ? [...apiMessages, ...localMessages] : apiMessages;
+    if (localMessages.length === 0) return apiMessages;
+
+    // Dedupe: a local message whose role+content matches an API message
+    // is the same message confirmed by the backend — drop the local copy
+    // (the API row is canonical and has a real DB id).
+    //
+    // Partially-typewritten assistant replies have content shorter than
+    // the API version, so they won't match and stay visible until the
+    // typewriter finishes filling them in — at which point they collapse
+    // onto the API version. Empty placeholders ("") also won't match
+    // unless the backend somehow stored an empty assistant message.
+    //
+    // We use a Map keyed by role+content with a remaining-count, so that
+    // a genuinely duplicated send (user types the exact same line twice
+    // in a row) is preserved: each API occurrence cancels one local
+    // occurrence, not all of them.
+    const remaining = new Map();
+    for (const m of apiMessages) {
+      const key = `${m.role}::${m.content}`;
+      remaining.set(key, (remaining.get(key) || 0) + 1);
+    }
+
+    const stillLocal = [];
+    for (const m of localMessages) {
+      const key = `${m.role}::${m.content}`;
+      const left = remaining.get(key) || 0;
+      if (left > 0) {
+        remaining.set(key, left - 1);
+        continue;
+      }
+      stillLocal.push(m);
+    }
+
+    return [...apiMessages, ...stillLocal];
   }, [chatData?.messages, localMessages]);
 
   const buildPayload = async (message, imageFile, conversationHistory) => {
@@ -233,6 +280,7 @@ const Chat = () => {
       current_city,
       current_lat,
       current_lon,
+      quality_mode: qualityMode,
     };
   };
 
@@ -243,6 +291,15 @@ const Chat = () => {
       createChatMutation.isPending
     )
       return;
+
+    // Gate everything behind auth — the input/prompt cards are visible
+    // to anonymous visitors, but actually sending opens the dialog.
+    // The textarea state is preserved so the user can hit Send again
+    // after signing in.
+    if (!session) {
+      openLoginDialog('signin');
+      return;
+    }
 
     if (!chatId) {
       setWelcomed(true);
@@ -408,6 +465,8 @@ const Chat = () => {
           isLoading={isLoading || showChatSkeleton}
           onStop={handleStop}
           placeholder={isWelcome ? "Sketch a brief — for an Eid drop, a campaign, a launch…" : "Message Brandmate…"}
+          qualityMode={qualityMode}
+          onQualityModeChange={setQualityMode}
         />
       </div>
     </div>

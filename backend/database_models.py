@@ -15,13 +15,15 @@ class MessageType(str, Enum):
     WEBSITE = "website"
 
 class ChatCreate(BaseModel):
+    """Inbound payload for creating a chat. `user_id` is never accepted
+    from the client; the server always sets it from the authenticated
+    JWT to prevent users from forging ownership."""
     title: Optional[str] = None
-    user_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     id: str
     title: Optional[str]
-    user_id: Optional[str]
+    user_id: str
     created_at: datetime
     updated_at: datetime
 

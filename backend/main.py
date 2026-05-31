@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -22,6 +22,8 @@ from model_loader import (
 )
 from services.database_service import database_service
 from services.storage_service import storage_service
+from services.supabase_client import supabase_client
+from services.auth import get_current_user, CurrentUser
 from database_models import ChatCreate, ChatResponse, MessageCreate, MessageResponse, ChatWithMessages, MessageRole, MessageType, Chat
 from generators.video_generator import VideoGenerator
 from services.billboard_scraper import (
@@ -40,10 +42,11 @@ load_dotenv()
 
 app = FastAPI(title="Brandmate API", version="1.0.0")
 
-# CORS middleware
+# CORS middleware — accept any localhost/127.0.0.1 port for dev so a
+# bumped Vite port (5174, 5175, etc.) doesn't break the frontend.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # React dev server
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,8 +56,8 @@ app.add_middleware(
 print("Starting Brandmate server... (LLM loading at startup; Image/Text load on demand)")
 threading.Thread(target=load_llm_at_startup, daemon=True).start()
 
-# Video generator — stays loaded (no heavy model, just ComfyUI HTTP client)
-video_generator = VideoGenerator()  # ← new
+# Video generator — stays loaded (lightweight HTTP client)
+video_generator = VideoGenerator()
 
 class ChatMessage(BaseModel):
     role: str  # "system", "user", "assistant"
@@ -75,6 +78,7 @@ class MessageRequest(BaseModel):
     current_city: str | None = None
     current_lat: float | None = None
     current_lon: float | None = None
+    quality_mode: str | None = None  # "speed" | "balanced" | "quality" — video gen tradeoff
 
 class ChatResponse(BaseModel):
     message: str
@@ -115,67 +119,39 @@ def _is_placeholder_city(city: str) -> bool:
     return value in placeholders
 
 
-def _resolve_billboard_city(
+def _resolve_near_me_city(
     message: str,
-    city: str,
-    client_ip: str = None,
-    current_city: str = None,
-    current_lat: float = None,
-    current_lon: float = None,
+    current_city: str | None,
+    current_lat: float | None,
+    current_lon: float | None,
+    client_ip: Optional[str],
 ) -> str:
-    """Resolve the city for billboard search with location taking precedence for near-me queries."""
-    near_me_query = detect_near_me_query(message)
-
-    if near_me_query:
-        if current_lat is not None and current_lon is not None:
-            detected_city = get_city_from_coordinates(current_lat, current_lon)
-            if detected_city:
-                print(f"DEBUG: Using city from browser coordinates: {detected_city}")
-                return detected_city
-
-        if current_city and not _is_placeholder_city(current_city):
-            detected_city = current_city.strip()
-            print(f"DEBUG: Using city from browser geolocation: {detected_city}")
-            return detected_city
-
-        detected_city = get_city_for_query(message, client_ip)
+    """Resolve a city for near-me billboard searches with a hard Islamabad fallback."""
+    if current_lat is not None and current_lon is not None:
+        detected_city = get_city_from_coordinates(current_lat, current_lon)
         if detected_city:
-            print(f"DEBUG: Using detected city from IP geolocation: {detected_city}")
+            print(f"DEBUG: Using city from browser coordinates: {detected_city}")
             return detected_city
 
-    if city and not _is_placeholder_city(city):
-        return city.strip()
+    if current_city and not _is_placeholder_city(current_city):
+        resolved_city = current_city.strip()
+        print(f"DEBUG: Using city from browser geolocation: {resolved_city}")
+        return resolved_city
 
-    return extract_city_from_text(message) or ""
+    detected_city = get_city_for_query(message, client_ip)
+    if detected_city:
+        print(f"DEBUG: Using detected city from IP geolocation: {detected_city}")
+        return detected_city
 
-
-def _message_requests_reference_image(message: str) -> bool:
-    """Heuristic to detect when user wants to animate an existing/attached image."""
-    text = (message or "").lower()
-    if not text:
-        return False
-    patterns = [
-        r"\bthis\s+image\b",
-        r"\bthat\s+image\b",
-        r"\bcurrent\s+image\b",
-        r"\bthis\s+photo\b",
-        r"\bthat\s+photo\b",
-        r"\bthis\s+picture\b",
-        r"\bthat\s+picture\b",
-        r"\banimate\s+it\b",
-        r"\buse\s+this\s+image\b",
-        r"\buse\s+that\s+image\b",
-        r"\bvideo\s+of\s+(this|that)\s+(image|photo|picture)\b",
-    ]
-    return any(re.search(p, text) for p in patterns)
+    print("DEBUG: Near-me geolocation failed; falling back to Islamabad")
+    return "islamabad"
 
 
-async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
-    """Fetch the most recent non-video image-like asset from this chat for I2V."""
+async def _fetch_latest_image_from_chat(db_client, chat_id: str) -> Optional[bytes]:
+    """Fetch the most recent generated image from this chat as bytes for I2V."""
     try:
-        messages = await database_service.get_messages(chat_id, limit=50)
-        # Walk backwards and find latest message with an asset URL that is not a video.
-        # This includes assistant IMAGE outputs and user uploads stored as TEXT with s3_url.
+        messages = await database_service.get_messages(db_client, chat_id, limit=50)
+        # Walk backwards, find latest message with s3_url and IMAGE type
         for msg in reversed(messages):
             if msg.s3_url and msg.message_type != MessageType.VIDEO:
                 import requests as _req
@@ -189,6 +165,7 @@ async def _fetch_latest_image_from_chat(chat_id: str) -> Optional[bytes]:
 
 async def process_message(
     llm_orchestrator,
+    db_client,
     chat_id: str,
     message: str,
     conversation_history: list[ChatMessage],
@@ -197,6 +174,7 @@ async def process_message(
     current_city: str = None,
     current_lat: float = None,
     current_lon: float = None,
+    quality_mode: str = None,
 ) -> ChatResponse:
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
@@ -294,15 +272,10 @@ async def process_message(
                     city = ""
                 if not ad_type or ad_type == "billboard":
                     ad_type = infer_ad_type_from_text(message)
-
-                city = _resolve_billboard_city(
-                    message=message,
-                    city=city,
-                    client_ip=client_ip,
-                    current_city=current_city,
-                    current_lat=current_lat,
-                    current_lon=current_lon,
-                )
+                
+                # If this is a near-me request, prefer live location over the LLM's city guess.
+                if detect_near_me_query(message):
+                    city = _resolve_near_me_city(message, current_city, current_lat, current_lon, client_ip)
                 
                 if not city:
                     response_message = "Please specify a city to search for billboards (e.g. Lahore, Karachi, Islamabad), or enable location access to use 'near me' search."
@@ -327,36 +300,41 @@ async def process_message(
                 use_reference_image = result["parameters"].get("use_reference_image", False)
                 wants_reference_image = use_reference_image or _message_requests_reference_image(message)
                 try:
+                    qm = quality_mode or "balanced"
                     if image_bytes:
                         # User attached an image — always use it
-                        print(f"DEBUG: Routing to I2V (image attached)")
+                        print(f"DEBUG: Routing to I2V (image attached, quality={qm})")
                         video_data = await video_generator.generate_i2v(
                             prompt=description,
                             image_bytes=image_bytes,
                             video_type=video_type,
+                            quality_mode=qm,
                         )
                     elif wants_reference_image:
                         # User referred to a previous image — fetch latest from DB
-                        print(f"DEBUG: Routing to I2V (reference image from history)")
-                        ref_image_bytes = await _fetch_latest_image_from_chat(chat_id)
+                        print(f"DEBUG: Routing to I2V (reference image from history, quality={qm})")
+                        ref_image_bytes = await _fetch_latest_image_from_chat(db_client, chat_id)
                         if ref_image_bytes:
                             video_data = await video_generator.generate_i2v(
                                 prompt=description,
                                 image_bytes=ref_image_bytes,
                                 video_type=video_type,
+                                quality_mode=qm,
                             )
                         else:
                             print(f"DEBUG: No reference image found, falling back to T2V")
                             video_data = await video_generator.generate_t2v(
                                 prompt=description,
                                 video_type=video_type,
+                                quality_mode=qm,
                             )
                     else:
                         # Pure text-to-video
-                        print(f"DEBUG: Routing to T2V (no image)")
+                        print(f"DEBUG: Routing to T2V (no image, quality={qm})")
                         video_data = await video_generator.generate_t2v(
                             prompt=description,
                             video_type=video_type,
+                            quality_mode=qm,
                         )
                     try:
                         s3_url = await storage_service.store_generated_image(video_data, description)
@@ -369,7 +347,7 @@ async def process_message(
                     tool_used = "video_generation"
                 except Exception as video_error:
                     print(f"Video generation error: {video_error}")
-                    response_message = "I encountered an issue generating the video. Please make sure ComfyUI is running and try again."
+                    response_message = "I encountered an issue generating the video. Please try again in a moment."
                 
             elif tool_name == "website_generation":
                 # One comprehensive prompt; website generator always produces a landing page.
@@ -403,15 +381,8 @@ async def process_message(
             if should_trigger_billboard_search(message):
                 city = ""
                 ad_type = infer_ad_type_from_text(message)
-
-                city = _resolve_billboard_city(
-                    message=message,
-                    city=city,
-                    client_ip=client_ip,
-                    current_city=current_city,
-                    current_lat=current_lat,
-                    current_lon=current_lon,
-                )
+                if detect_near_me_query(message):
+                    city = _resolve_near_me_city(message, current_city, current_lat, current_lon, client_ip)
 
                 if city:
                     try:
@@ -442,7 +413,7 @@ async def process_message(
             msg_metadata = None
             if tool_used == "website_generation" and response_html:
                 msg_metadata = {"html": response_html}
-            await database_service.create_message(MessageCreate(
+            await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content=response_message,
@@ -529,7 +500,7 @@ async def convert_video(url: str = Query(...)):
                 frame.save(frame_path)
                 frame_paths.append(frame_path)
 
-            # Encode frames to MP4 with ffmpeg at 16fps (ComfyUI default)
+            # Encode frames to MP4 with ffmpeg at 8fps to match the source rate
             ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
             frame_pattern = os.path.join(tmpdir, "frame_%04d.png")
             result = subprocess.run(
@@ -588,10 +559,14 @@ async def image_proxy(url: str = Query(...)):
 
 
 @app.post("/api/chats", response_model=ChatResponse)
-async def create_chat(request: ChatCreate):
-    """Create a new chat"""
+async def create_chat(
+    request: ChatCreate,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Create a new chat owned by the authenticated user."""
     try:
-        chat = await database_service.create_chat(request)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chat = await database_service.create_chat(db_client, user_id=user.id, chat_data=request)
         return ChatResponse(
             message="Chat created successfully",
             tool="chat_created",
@@ -602,9 +577,16 @@ async def create_chat(request: ChatCreate):
         raise HTTPException(status_code=500, detail="Failed to create chat")
 
 @app.post("/api/chats/{chat_id}/messages", response_model=ChatResponse)
-async def send_message(chat_id: str, request: MessageRequest, http_request: Request):
-    """Send a message to an existing chat"""
+async def send_message(
+    chat_id: str,
+    request: MessageRequest,
+    http_request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Send a message to a chat the user owns."""
     try:
+        db_client = supabase_client.client_for_user(user.access_token)
+
         # Decode base64 image to bytes if present (for I2V)
         image_bytes = None
         if request.image_base64:
@@ -612,8 +594,8 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
             image_bytes = _base64.b64decode(request.image_base64)
             print(f"DEBUG: Image received ({len(image_bytes)} bytes)")
 
-        # Verify chat exists
-        chat = await database_service.get_chat(chat_id)
+        # Verify chat exists AND belongs to caller (RLS scopes the lookup).
+        chat = await database_service.get_chat(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         
@@ -644,12 +626,12 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
                 except Exception as s3_err:
                     print(f"DEBUG: Failed to store user image: {s3_err}")
 
-            user_message = await database_service.create_message(MessageCreate(
+            user_message = await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
                 message_type=MessageType.TEXT,
-                 s3_url=user_image_s3
+                s3_url=user_image_s3
             ))
         except Exception as db_error:
             error_msg = str(db_error)
@@ -672,9 +654,10 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
         
         # Extract client IP for geolocation
         client_ip = _extract_client_ip(http_request)
-        
+
         return await process_message(
             llm_orchestrator,
+            db_client,
             chat_id,
             request.message,
             request.conversation_history,
@@ -683,8 +666,9 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
             request.current_city,
             request.current_lat,
             request.current_lon,
+            request.quality_mode,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -692,8 +676,14 @@ async def send_message(chat_id: str, request: MessageRequest, http_request: Requ
         raise HTTPException(status_code=500, detail="Failed to send message")
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, http_request: Request):
+async def chat(
+    request: ChatRequest,
+    http_request: Request,
+    user: CurrentUser = Depends(get_current_user),
+):
     try:
+        db_client = supabase_client.client_for_user(user.access_token)
+
         # Get LLM (loads on first use). If loading, ask user to wait.
         llm_orchestrator, llm_status = get_llm()
         if llm_status == "loading":
@@ -708,18 +698,18 @@ async def chat(request: ChatRequest, http_request: Request):
                     message="Service components failed to initialize. Please check server logs for details.",
                     tool="error"
                 )
-        
+
         # Get or create chat
         chat_id = request.chat_id
         try:
             if not chat_id:
                 # Create new chat
                 chat_data = ChatCreate(title=request.message[:50] + "..." if len(request.message) > 50 else request.message)
-                chat = await database_service.create_chat(chat_data)
+                chat = await database_service.create_chat(db_client, user_id=user.id, chat_data=chat_data)
                 chat_id = chat.id
-            
+
             # Save user message
-            user_message = await database_service.create_message(MessageCreate(
+            user_message = await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.USER,
                 content=request.message,
@@ -752,7 +742,7 @@ async def chat(request: ChatRequest, http_request: Request):
                         print(f"S3 storage error: {s3_error}")
                         s3_url = generated_image
                     try:
-                        await database_service.create_message(MessageCreate(
+                        await database_service.create_message(db_client, MessageCreate(
                             chat_id=chat_id,
                             role=MessageRole.ASSISTANT,
                             content="I've generated an image based on your request. The LLM service is currently unavailable, so I couldn't analyze your request in detail.",
@@ -774,7 +764,7 @@ async def chat(request: ChatRequest, http_request: Request):
                     # immediately reclaim VRAM when offload() calls gc.collect().
                     del image_generator
                     offload_image_generator()
-            await database_service.create_message(MessageCreate(
+            await database_service.create_message(db_client, MessageCreate(
                 chat_id=chat_id,
                 role=MessageRole.ASSISTANT,
                 content="I'm currently operating with limited functionality. The language model is still initializing or unavailable. You can try simple image generation requests or check back later.",
@@ -788,9 +778,10 @@ async def chat(request: ChatRequest, http_request: Request):
         
         # Extract client IP for geolocation
         client_ip = _extract_client_ip(http_request)
-        
+
         return await process_message(
             llm_orchestrator,
+            db_client,
             chat_id,
             request.message,
             request.conversation_history,
@@ -800,7 +791,7 @@ async def chat(request: ChatRequest, http_request: Request):
             request.current_lat,
             request.current_lon,
         )
-        
+
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
         return ChatResponse(
@@ -809,20 +800,28 @@ async def chat(request: ChatRequest, http_request: Request):
         )
 
 @app.get("/api/chats", response_model=list[Chat])
-async def get_chats(user_id: str = None, limit: int = 50):
-    """Get all chats, optionally filtered by user_id"""
+async def get_chats(
+    limit: int = 50,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get all chats owned by the authenticated user (RLS-scoped)."""
     try:
-        chats = await database_service.get_chats(user_id=user_id, limit=limit)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chats = await database_service.get_chats(db_client, limit=limit)
         return chats
     except Exception as e:
         print(f"Error getting chats: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve chats")
 
 @app.get("/api/chats/{chat_id}", response_model=ChatWithMessages)
-async def get_chat(chat_id: str):
-    """Get a specific chat with all its messages"""
+async def get_chat(
+    chat_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get a specific chat with all its messages. RLS scopes ownership."""
     try:
-        chat = await database_service.get_chat_with_messages(chat_id)
+        db_client = supabase_client.client_for_user(user.access_token)
+        chat = await database_service.get_chat_with_messages(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
         return chat
@@ -833,20 +832,30 @@ async def get_chat(chat_id: str):
         raise HTTPException(status_code=500, detail="Failed to retrieve chat")
 
 @app.get("/api/chats/{chat_id}/messages", response_model=list[MessageResponse])
-async def get_messages(chat_id: str, limit: int = 100):
-    """Get messages for a specific chat"""
+async def get_messages(
+    chat_id: str,
+    limit: int = 100,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Get messages for a specific chat. RLS scopes ownership."""
     try:
-        messages = await database_service.get_messages(chat_id, limit=limit)
+        db_client = supabase_client.client_for_user(user.access_token)
+        messages = await database_service.get_messages(db_client, chat_id, limit=limit)
         return messages
     except Exception as e:
         print(f"Error getting messages: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve messages")
 
 @app.put("/api/chats/{chat_id}/title")
-async def update_chat_title(chat_id: str, title: str):
-    """Update chat title"""
+async def update_chat_title(
+    chat_id: str,
+    title: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Update chat title (caller must own the chat)."""
     try:
-        success = await database_service.update_chat_title(chat_id, title)
+        db_client = supabase_client.client_for_user(user.access_token)
+        success = await database_service.update_chat_title(db_client, chat_id, title)
         if not success:
             raise HTTPException(status_code=404, detail="Chat not found")
         return {"message": "Chat title updated successfully"}
@@ -857,19 +866,23 @@ async def update_chat_title(chat_id: str, title: str):
         raise HTTPException(status_code=500, detail="Failed to update chat title")
 
 @app.delete("/api/chats/{chat_id}")
-async def delete_chat(chat_id: str):
-    """Delete a chat and all its messages"""
+async def delete_chat(
+    chat_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Delete a chat and all its messages (caller must own the chat)."""
     try:
-        # Verify chat exists first
-        chat = await database_service.get_chat(chat_id)
+        db_client = supabase_client.client_for_user(user.access_token)
+
+        # Verify chat exists AND belongs to caller (RLS scopes the lookup).
+        chat = await database_service.get_chat(db_client, chat_id)
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
-        
-        # Delete the chat and all its messages
-        success = await database_service.delete_chat(chat_id)
+
+        success = await database_service.delete_chat(db_client, chat_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete chat")
-        
+
         return {"message": "Chat deleted successfully"}
     except HTTPException:
         raise

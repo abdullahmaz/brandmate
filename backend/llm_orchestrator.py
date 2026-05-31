@@ -303,13 +303,15 @@ class LLMOrchestrator:
         
         Example of a good prompt: "Create a marketing_copy for a new summer lawn collection targeting modern Pakistani women. The content should be elegant and sophisticated, include cultural references to Eid and festive seasons, use relevant emojis and hashtags like #PakistaniFashion #LawnCollection, emphasize quality and craftsmanship. The collection features floral prints, pastel colors, and lightweight cotton fabric suitable for hot weather."
 
-        When users ask for videos, preserve their core intent. Do NOT invent constraints the user did not request (for example duration like "60 seconds", fps, aspect ratio, camera movement, or style mandates). You may lightly enrich the description, but keep the original subject and request intact. If the video involves clothing or fashion, keep it Eastern clothing context (shalwar kameez, kurta, lawn suits, lehenga, dupatta, etc.). Use:
+        Modesty rules for ALL video descriptions: clothing MUST be modest, fully-covered Eastern clothing (shalwar kameez, kurta, lawn suits, lehenga with full dupatta coverage). NEVER describe revealing, tight, suggestive, or skin-exposing imagery. NEVER describe western dress, swimwear, lingerie, or bare skin. Always describe full sleeves, modest necklines, and dupatta covering the chest. Keep descriptions family-friendly, professional, and appropriate for an Eastern fashion brand. NEVER mention duration in seconds (the video model produces a fixed short clip).
+
+        For TEXT-TO-VIDEO (use_reference_image: false), expand the user's request into a rich, single-paragraph description. Include: camera movement (slow pan, tracking shot, static, zoom), lighting (golden hour, soft studio light, dramatic shadows, natural daylight), color palette, subject motion and expression, background/environment details, and quality cues (4K, cinematic, high detail, smooth motion). Use:
         <video_generation>
         {"parameters": {"description": "faithful user intent with light enhancement", "video_type": "promotional", "use_reference_image": false}}
 
-        If the user refers to an attached/current/previously generated image ("that image", "this image", "current image", "animate it", "make a video of it", "use that photo", "use this photo", "previously generated image"), keep the description aligned to that image and ALWAYS set use_reference_image to true:
+        For IMAGE-TO-VIDEO (use_reference_image: true) — when the user refers to a previously generated image ("that image", "this image", "animate it", "make a video of it", "use that photo") — write a SHORT description (1-2 sentences, max ~40 words). Describe ONLY motion and camera movement. DO NOT re-describe the clothing, model, scene, or background — those come from the reference image and re-describing them causes the video to drift away from the source. DO NOT add new objects, locations, or props that aren't in the image. Good examples: "The model walks forward toward the camera and gives a small twirl, then poses with hands on hips. Slow camera push-in.", "She turns her head slowly and smiles. Static camera.", "She walks across the frame from left to right at a relaxed pace. Camera tracks her gently.". Use:
         <video_generation>
-        {"parameters": {"description": "animate the referenced image while preserving the user's requested effect", "video_type": "promotional", "use_reference_image": true}}
+        {"parameters": {"description": "short motion-only description", "video_type": "promotional", "use_reference_image": true}}
 
         When users ask for websites, use:
         <website_generation>

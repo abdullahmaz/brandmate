@@ -6,65 +6,148 @@ import os
 import random
 import shutil
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
+
 import websocket
-from pathlib import Path
-from typing import Optional
-import httpx
+from huggingface_hub import AsyncInferenceClient
 
 from config import (
+    VIDEO_BACKEND_TOKEN,
+    VIDEO_BACKEND_PROVIDER,
+    VIDEO_BACKEND_T2V_MODEL,
+    VIDEO_BACKEND_I2V_MODEL,
+    VIDEO_BACKEND_TIMEOUT,
     COMFYUI_URL,
     COMFYUI_CLIENT_ID,
     LOCAL_VIDEO_DIR,
     WORKFLOWS_DIR,
     T2V_POSITIVE_NODE,
     T2V_SEED_NODE,
+    T2V_LENGTH_NODE,
     I2V_POSITIVE_NODE,
     I2V_IMAGE_NODE,
     I2V_SEED_NODE,
+    I2V_LENGTH_NODE,
+    SAVE_NODE,
+    VIDEO_QUALITY_PRESETS,
+    VIDEO_QUALITY_DEFAULT,
 )
 
-class VideoGenerator:
-    def __init__(self):
-        self.comfyui_url = COMFYUI_URL
-        self._t2v_workflow = self._load_workflow("wan2.1_t2v.json")
-        self._i2v_workflow = self._load_workflow("wan2.1_i2b_fun_1.4b.json")
-        self.model_loaded = True  # ComfyUI manages its own model lifecycle
 
-        # Local folder to copy generated videos into
+def _preset_for(quality_mode: str) -> dict:
+    return VIDEO_QUALITY_PRESETS.get(quality_mode, VIDEO_QUALITY_PRESETS[VIDEO_QUALITY_DEFAULT])
+
+
+_PROMPT_PREFIX = (
+    "Modest, fully-covered traditional Eastern clothing only "
+    "(shalwar kameez, kurta, lawn suit, lehenga with full dupatta coverage). "
+    "Conservative, family-friendly, professional fashion content. "
+    "No skin exposure, no revealing or suggestive imagery. "
+)
+
+_NEGATIVE_PROMPT = (
+    "nudity, nsfw, revealing clothing, bikini, lingerie, swimwear, cleavage, "
+    "bare shoulders, midriff, short skirt, tight clothing, western dress, "
+    "low-cut, sexual, suggestive, exposed skin"
+)
+
+
+def _guess_mime(video_bytes: bytes) -> str:
+    head = video_bytes[:32]
+    if b"ftyp" in head:
+        return "video/mp4"
+    if head.startswith(b"RIFF") and b"WEBP" in head[:16]:
+        return "image/webp"
+    return "video/mp4"
+
+
+def _to_data_uri(video_bytes: bytes) -> str:
+    mime = _guess_mime(video_bytes)
+    return f"data:{mime};base64,{base64.b64encode(video_bytes).decode()}"
+
+
+class _RemoteBackend:
+    """Calls a hosted video service via HF Inference Providers."""
+
+    def __init__(self):
+        self._t2v_model = VIDEO_BACKEND_T2V_MODEL
+        self._i2v_model = VIDEO_BACKEND_I2V_MODEL
+        self._client = AsyncInferenceClient(
+            provider=VIDEO_BACKEND_PROVIDER or None,
+            api_key=VIDEO_BACKEND_TOKEN or None,
+            timeout=VIDEO_BACKEND_TIMEOUT,
+        )
+
+    @property
+    def configured(self) -> bool:
+        return bool(VIDEO_BACKEND_TOKEN and self._t2v_model and self._i2v_model)
+
+    async def text_to_video(self, prompt: str, preset: dict) -> bytes:
+        # Cloud only takes num_frames; playback fps is provider-controlled,
+        # so durations on cloud may differ from local (which encodes the fps
+        # directly into the WEBP).
+        return await self._client.text_to_video(
+            prompt,
+            model=self._t2v_model,
+            negative_prompt=_NEGATIVE_PROMPT,
+            num_frames=preset["frames"],
+        )
+
+    async def image_to_video(self, prompt: str, image_bytes: bytes, preset: dict) -> bytes:
+        return await self._client.image_to_video(
+            image_bytes,
+            prompt=prompt,
+            model=self._i2v_model,
+            negative_prompt=_NEGATIVE_PROMPT,
+            num_frames=preset["frames"],
+        )
+
+
+class _LocalBackend:
+    """Calls a locally-running ComfyUI instance using the bundled workflows."""
+
+    def __init__(self):
+        self._url = COMFYUI_URL
+        self._workflows_loaded = False
+        try:
+            self._t2v_workflow = self._load_workflow("wan2.1_t2v.json")
+            self._i2v_workflow = self._load_workflow("wan2.1_i2b_fun_1.4b.json")
+            self._workflows_loaded = True
+        except Exception as e:
+            print(f"DEBUG: Local video backend workflow load failed: {e}")
         os.makedirs(LOCAL_VIDEO_DIR, exist_ok=True)
 
-    def _load_workflow(self, filename: str) -> dict:
-        path = WORKFLOWS_DIR / filename
-        with open(path) as f:
+    @property
+    def configured(self) -> bool:
+        return self._workflows_loaded and bool(self._url)
+
+    @staticmethod
+    def _load_workflow(filename: str) -> dict:
+        with open(WORKFLOWS_DIR / filename) as f:
             return json.load(f)
 
     def _upload_image_sync(self, image_bytes: bytes, filename: str = "brandmate_input.jpg") -> str:
-        "Upload image to ComfyUI synchronously"
         import requests
         files = {"image": (filename, image_bytes, "image/jpeg")}
-        response = requests.post(f"{self.comfyui_url}/upload/image", files=files)
+        response = requests.post(f"{self._url}/upload/image", files=files)
         response.raise_for_status()
-        assigned_name = response.json()["name"]
-        print(f"DEBUG: Image uploaded to ComfyUI as '{assigned_name}'")
-        return assigned_name
+        return response.json()["name"]
 
-    def _generate_sync(self, workflow: dict) -> Optional[str]:
-        # 1. Connect WebSocket (derive ws:// or wss:// from COMFYUI_URL so ngrok/HTTPS works)
-        ws_url = self.comfyui_url.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    def _generate_sync(self, workflow: dict) -> bytes:
+        ws_url = self._url.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
         ws = websocket.WebSocket()
         ws.connect(f"{ws_url}/ws?clientId={COMFYUI_CLIENT_ID}")
 
-        # 2. Queue prompt
-        print("DEBUG: Sending prompt to ComfyUI...")
-        p = {"prompt": workflow, "client_id": COMFYUI_CLIENT_ID}
-        data = json.dumps(p).encode("utf-8")
-        req = urllib.request.Request(f"{self.comfyui_url}/prompt", data=data)
-        prompt_id = json.loads(urllib.request.urlopen(req).read())["prompt_id"]
-        print(f"DEBUG: Workflow queued, prompt_id={prompt_id}")
+        payload = json.dumps({"prompt": workflow, "client_id": COMFYUI_CLIENT_ID}).encode("utf-8")
+        req = urllib.request.Request(f"{self._url}/prompt", data=payload)
+        try:
+            prompt_id = json.loads(urllib.request.urlopen(req).read())["prompt_id"]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"ComfyUI rejected workflow ({e.code}): {body}") from e
 
-        # 3. Wait for completion via WebSocket
         while True:
             out = ws.recv()
             if isinstance(out, str):
@@ -74,71 +157,93 @@ class VideoGenerator:
                     and message["data"]["node"] is None
                     and message["data"]["prompt_id"] == prompt_id
                 ):
-                    print("DEBUG: ComfyUI generation complete!")
                     break
         ws.close()
 
-        # 4. Lookup output entry from history — target node 28 (SaveAnimatedWEBP)
-        time.sleep(2)  # buffer for file writing
-        video_info = None
-        try:
-            with urllib.request.urlopen(f"{self.comfyui_url}/history/{prompt_id}") as res:
-                history_response = json.loads(res.read())
-                if prompt_id in history_response:
-                    history = history_response[prompt_id]
-                    if "outputs" in history and "28" in history["outputs"]:
-                        node_output = history["outputs"]["28"]
-                        for key in ["gifs", "images", "animated", "webp"]:
-                            if key in node_output:
-                                entry = node_output[key][0]
-                                video_info = {
-                                    "filename": entry["filename"],
-                                    "subfolder": entry.get("subfolder", ""),
-                                    "type": entry.get("type", "output"),
-                                }
-                                break
-        except Exception as e:
-            print(f"DEBUG: History lookup failed: {e}")
+        time.sleep(2)
+        with urllib.request.urlopen(f"{self._url}/history/{prompt_id}") as res:
+            history = json.loads(res.read())[prompt_id]
 
-        if not video_info:
-            print("DEBUG: Could not find output filename in history")
-            return None
+        node_output = history.get("outputs", {}).get("28", {})
+        entry = None
+        for key in ("gifs", "images", "animated", "webp"):
+            if key in node_output:
+                entry = node_output[key][0]
+                break
+        if not entry:
+            raise RuntimeError("Local video backend: no output found in workflow history.")
 
-        # 5. Download file from ComfyUI /view (works for local OR remote/ngrok ComfyUI)
-        video_filename = video_info["filename"]
-        dst_path = os.path.join(LOCAL_VIDEO_DIR, video_filename)
-        view_url = f"{self.comfyui_url}/view?{urllib.parse.urlencode(video_info)}"
-        try:
-            with urllib.request.urlopen(view_url) as res, open(dst_path, "wb") as f:
-                shutil.copyfileobj(res, f)
-            print(f"DEBUG: Video downloaded to: {dst_path}")
-            return dst_path
-        except Exception as e:
-            print(f"DEBUG: Download from /view failed: {e}")
-        return None
+        view_url = f"{self._url}/view?{urllib.parse.urlencode({'filename': entry['filename'], 'subfolder': entry.get('subfolder', ''), 'type': entry.get('type', 'output')})}"
+        local_path = os.path.join(LOCAL_VIDEO_DIR, entry["filename"])
+        with urllib.request.urlopen(view_url) as res, open(local_path, "wb") as f:
+            shutil.copyfileobj(res, f)
 
-    async def _run_generation(self, workflow: dict) -> str:
-        """Run blocking _generate_sync in thread pool so FastAPI loop isn't blocked."""
+        with open(local_path, "rb") as f:
+            return f.read()
+
+    async def _run_workflow(self, workflow: dict) -> bytes:
         loop = asyncio.get_event_loop()
-        local_path = await loop.run_in_executor(None, self._generate_sync, workflow)
-        if not local_path:
-            raise RuntimeError("Video generation failed or timed out")
-        return local_path
+        return await loop.run_in_executor(None, self._generate_sync, workflow)
 
-    def _read_as_base64(self, file_path: str) -> str:
-        """Read WEBP from disk and return as base64 data URI (same as streamlit app)."""
-        with open(file_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-        return f"data:image/webp;base64,{b64}"
-
-    async def generate_t2v(self, prompt: str, video_type: str = "promotional") -> str:
-        """Text-to-video — injects prompt into T2V workflow and returns base64 WEBP."""
+    async def text_to_video(self, prompt: str, preset: dict) -> bytes:
         workflow = copy.deepcopy(self._t2v_workflow)
         workflow[T2V_POSITIVE_NODE]["inputs"]["text"] = prompt
         workflow[T2V_SEED_NODE]["inputs"]["seed"] = random.randint(0, 2**32 - 1)
+        workflow[T2V_LENGTH_NODE]["inputs"]["length"] = preset["frames"]
+        workflow[SAVE_NODE]["inputs"]["fps"] = preset["fps"]
+        return await self._run_workflow(workflow)
 
-        local_path = await self._run_generation(workflow)
-        return self._read_as_base64(local_path)
+    async def image_to_video(self, prompt: str, image_bytes: bytes, preset: dict) -> bytes:
+        loop = asyncio.get_event_loop()
+        comfy_image_name = await loop.run_in_executor(None, self._upload_image_sync, image_bytes)
+        workflow = copy.deepcopy(self._i2v_workflow)
+        workflow[I2V_POSITIVE_NODE]["inputs"]["text"] = prompt
+        workflow[I2V_IMAGE_NODE]["inputs"]["image"] = comfy_image_name
+        workflow[I2V_SEED_NODE]["inputs"]["seed"] = random.randint(0, 2**32 - 1)
+        workflow[I2V_LENGTH_NODE]["inputs"]["length"] = preset["frames"]
+        workflow[SAVE_NODE]["inputs"]["fps"] = preset["fps"]
+        return await self._run_workflow(workflow)
+
+
+class VideoGenerator:
+    """Generates short videos. Tries the remote service first, falls back to a
+    locally-running secondary if that fails (out of credit, network, auth, etc.).
+    """
+
+    def __init__(self):
+        self._remote = _RemoteBackend()
+        self._local = _LocalBackend()
+        self.model_loaded = True
+
+    @staticmethod
+    def _prepare_prompt(prompt: str) -> str:
+        return _PROMPT_PREFIX + prompt
+
+    async def _with_fallback(self, remote_call, local_call) -> bytes:
+        if self._remote.configured:
+            try:
+                return await remote_call()
+            except Exception as e:
+                if not self._local.configured:
+                    raise
+                print(f"DEBUG: Remote video backend failed ({e}); falling back to local.")
+        if not self._local.configured:
+            raise RuntimeError("Video service is not configured.")
+        return await local_call()
+
+    async def generate_t2v(
+        self,
+        prompt: str,
+        video_type: str = "promotional",
+        quality_mode: str = VIDEO_QUALITY_DEFAULT,
+    ) -> str:
+        prepared = self._prepare_prompt(prompt)
+        preset = _preset_for(quality_mode)
+        video_bytes = await self._with_fallback(
+            lambda: self._remote.text_to_video(prepared, preset),
+            lambda: self._local.text_to_video(prepared, preset),
+        )
+        return _to_data_uri(video_bytes)
 
     async def generate_i2v(
         self,
@@ -146,17 +251,12 @@ class VideoGenerator:
         image_bytes: bytes,
         image_filename: str = "brandmate_input.jpg",
         video_type: str = "promotional",
+        quality_mode: str = VIDEO_QUALITY_DEFAULT,
     ) -> str:
-        """Image-to-video — uploads image, injects into I2V workflow, returns base64 WEBP."""
-        loop = asyncio.get_event_loop()
-        comfy_image_name = await loop.run_in_executor(
-            None, self._upload_image_sync, image_bytes, image_filename
+        prepared = self._prepare_prompt(prompt)
+        preset = _preset_for(quality_mode)
+        video_bytes = await self._with_fallback(
+            lambda: self._remote.image_to_video(prepared, image_bytes, preset),
+            lambda: self._local.image_to_video(prepared, image_bytes, preset),
         )
-
-        workflow = copy.deepcopy(self._i2v_workflow)
-        workflow[I2V_POSITIVE_NODE]["inputs"]["text"] = prompt
-        workflow[I2V_IMAGE_NODE]["inputs"]["image"] = comfy_image_name
-        workflow[I2V_SEED_NODE]["inputs"]["seed"] = random.randint(0, 2**32 - 1)
-
-        local_path = await self._run_generation(workflow)
-        return self._read_as_base64(local_path)
+        return _to_data_uri(video_bytes)
