@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Button } from './ui/button';
-import { ArrowUp, Square, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, X, Settings2, Zap, Scale, Sparkles, Check } from 'lucide-react';
+
+const QUALITY_OPTIONS = [
+  { value: 'speed',    label: 'Speed',    desc: '6s · choppier playback (8 fps)', icon: Zap },
+  { value: 'balanced', label: 'Balanced', desc: '6s · smooth (12 fps)',          icon: Scale },
+  { value: 'quality',  label: 'Quality',  desc: '6s · native fps, smoothest (16 fps)', icon: Sparkles },
+];
 
 export const ChatInput = forwardRef(function ChatInput(
   {
@@ -8,14 +14,28 @@ export const ChatInput = forwardRef(function ChatInput(
     isLoading = false,
     onStop,
     placeholder = 'Sketch a brief — for an Eid drop, a campaign, a launch…',
+    qualityMode = 'balanced',
+    onQualityModeChange,
   },
   ref,
 ) {
   const [message, setMessage] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const settingsRef = useRef(null);
+
+  // Close popover on outside click.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onDocClick = (e) => {
+      if (!settingsRef.current?.contains(e.target)) setSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [settingsOpen]);
 
   useImperativeHandle(ref, () => ({
     setMessage: (text) => {
@@ -110,6 +130,67 @@ export const ChatInput = forwardRef(function ChatInput(
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
+
+              {/* Video quality settings */}
+              <div className="relative" ref={settingsRef}>
+                <Button
+                  type="button"
+                  onClick={() => setSettingsOpen((v) => !v)}
+                  size="icon"
+                  variant="ghost"
+                  disabled={isLoading}
+                  className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  title="Video quality"
+                  aria-haspopup="menu"
+                  aria-expanded={settingsOpen}
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+                {settingsOpen && (
+                  <div
+                    role="menu"
+                    className="absolute bottom-full left-0 mb-2 w-64 rounded-md border border-border bg-card shadow-lg overflow-hidden z-10"
+                  >
+                    <div className="px-3 py-2 border-b border-border">
+                      <p className="font-brand text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Video quality
+                      </p>
+                      <p className="font-brand-italic text-[11px] text-muted-foreground/70 mt-0.5">
+                        Trade speed for length & quality
+                      </p>
+                    </div>
+                    {QUALITY_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const active = qualityMode === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => {
+                            onQualityModeChange?.(opt.value);
+                            setSettingsOpen(false);
+                          }}
+                          className={`w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-muted/60 transition-colors ${
+                            active ? 'bg-muted/50' : ''
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-foreground" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[13px] font-medium text-foreground">{opt.label}</span>
+                              {active && <Check className="h-3 w-3 text-foreground" />}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <span className="font-brand-italic text-[11px] text-muted-foreground/70 select-none hidden sm:inline">
                 attach a swatch, sketch or reference
               </span>

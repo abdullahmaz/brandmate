@@ -25,10 +25,19 @@ from config import (
     WORKFLOWS_DIR,
     T2V_POSITIVE_NODE,
     T2V_SEED_NODE,
+    T2V_LENGTH_NODE,
     I2V_POSITIVE_NODE,
     I2V_IMAGE_NODE,
     I2V_SEED_NODE,
+    I2V_LENGTH_NODE,
+    SAVE_NODE,
+    VIDEO_QUALITY_PRESETS,
+    VIDEO_QUALITY_DEFAULT,
 )
+
+
+def _preset_for(quality_mode: str) -> dict:
+    return VIDEO_QUALITY_PRESETS.get(quality_mode, VIDEO_QUALITY_PRESETS[VIDEO_QUALITY_DEFAULT])
 
 
 _PROMPT_PREFIX = (
@@ -75,19 +84,24 @@ class _RemoteBackend:
     def configured(self) -> bool:
         return bool(VIDEO_BACKEND_TOKEN and self._t2v_model and self._i2v_model)
 
-    async def text_to_video(self, prompt: str) -> bytes:
+    async def text_to_video(self, prompt: str, preset: dict) -> bytes:
+        # Cloud only takes num_frames; playback fps is provider-controlled,
+        # so durations on cloud may differ from local (which encodes the fps
+        # directly into the WEBP).
         return await self._client.text_to_video(
             prompt,
             model=self._t2v_model,
             negative_prompt=_NEGATIVE_PROMPT,
+            num_frames=preset["frames"],
         )
 
-    async def image_to_video(self, prompt: str, image_bytes: bytes) -> bytes:
+    async def image_to_video(self, prompt: str, image_bytes: bytes, preset: dict) -> bytes:
         return await self._client.image_to_video(
             image_bytes,
             prompt=prompt,
             model=self._i2v_model,
             negative_prompt=_NEGATIVE_PROMPT,
+            num_frames=preset["frames"],
         )
 
 
@@ -171,19 +185,23 @@ class _LocalBackend:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._generate_sync, workflow)
 
-    async def text_to_video(self, prompt: str) -> bytes:
+    async def text_to_video(self, prompt: str, preset: dict) -> bytes:
         workflow = copy.deepcopy(self._t2v_workflow)
         workflow[T2V_POSITIVE_NODE]["inputs"]["text"] = prompt
         workflow[T2V_SEED_NODE]["inputs"]["seed"] = random.randint(0, 2**32 - 1)
+        workflow[T2V_LENGTH_NODE]["inputs"]["length"] = preset["frames"]
+        workflow[SAVE_NODE]["inputs"]["fps"] = preset["fps"]
         return await self._run_workflow(workflow)
 
-    async def image_to_video(self, prompt: str, image_bytes: bytes) -> bytes:
+    async def image_to_video(self, prompt: str, image_bytes: bytes, preset: dict) -> bytes:
         loop = asyncio.get_event_loop()
         comfy_image_name = await loop.run_in_executor(None, self._upload_image_sync, image_bytes)
         workflow = copy.deepcopy(self._i2v_workflow)
         workflow[I2V_POSITIVE_NODE]["inputs"]["text"] = prompt
         workflow[I2V_IMAGE_NODE]["inputs"]["image"] = comfy_image_name
         workflow[I2V_SEED_NODE]["inputs"]["seed"] = random.randint(0, 2**32 - 1)
+        workflow[I2V_LENGTH_NODE]["inputs"]["length"] = preset["frames"]
+        workflow[SAVE_NODE]["inputs"]["fps"] = preset["fps"]
         return await self._run_workflow(workflow)
 
 
@@ -213,11 +231,17 @@ class VideoGenerator:
             raise RuntimeError("Video service is not configured.")
         return await local_call()
 
-    async def generate_t2v(self, prompt: str, video_type: str = "promotional") -> str:
+    async def generate_t2v(
+        self,
+        prompt: str,
+        video_type: str = "promotional",
+        quality_mode: str = VIDEO_QUALITY_DEFAULT,
+    ) -> str:
         prepared = self._prepare_prompt(prompt)
+        preset = _preset_for(quality_mode)
         video_bytes = await self._with_fallback(
-            lambda: self._remote.text_to_video(prepared),
-            lambda: self._local.text_to_video(prepared),
+            lambda: self._remote.text_to_video(prepared, preset),
+            lambda: self._local.text_to_video(prepared, preset),
         )
         return _to_data_uri(video_bytes)
 
@@ -227,10 +251,12 @@ class VideoGenerator:
         image_bytes: bytes,
         image_filename: str = "brandmate_input.jpg",
         video_type: str = "promotional",
+        quality_mode: str = VIDEO_QUALITY_DEFAULT,
     ) -> str:
         prepared = self._prepare_prompt(prompt)
+        preset = _preset_for(quality_mode)
         video_bytes = await self._with_fallback(
-            lambda: self._remote.image_to_video(prepared, image_bytes),
-            lambda: self._local.image_to_video(prepared, image_bytes),
+            lambda: self._remote.image_to_video(prepared, image_bytes, preset),
+            lambda: self._local.image_to_video(prepared, image_bytes, preset),
         )
         return _to_data_uri(video_bytes)

@@ -47,6 +47,7 @@ const Chat = () => {
   const [localMessages, setLocalMessages] = useState([]);
   const [welcomed, setWelcomed] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [qualityMode, setQualityMode] = useState('balanced');
   const abortControllerRef = useRef(null);
   const typewriterRef = useRef(null);
   const prevChatIdRef = useRef(chatId);
@@ -279,6 +280,7 @@ const Chat = () => {
       current_city,
       current_lat,
       current_lon,
+      quality_mode: qualityMode,
     };
   };
 
@@ -463,6 +465,8 @@ const Chat = () => {
           isLoading={isLoading || showChatSkeleton}
           onStop={handleStop}
           placeholder={isWelcome ? "Sketch a brief — for an Eid drop, a campaign, a launch…" : "Message Brandmate…"}
+          qualityMode={qualityMode}
+          onQualityModeChange={setQualityMode}
         />
       </div>
     </div>

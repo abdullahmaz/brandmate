@@ -77,6 +77,7 @@ class MessageRequest(BaseModel):
     current_city: str | None = None
     current_lat: float | None = None
     current_lon: float | None = None
+    quality_mode: str | None = None  # "speed" | "balanced" | "quality" — video gen tradeoff
 
 class ChatResponse(BaseModel):
     message: str
@@ -172,6 +173,7 @@ async def process_message(
     current_city: str = None,
     current_lat: float = None,
     current_lon: float = None,
+    quality_mode: str = None,
 ) -> ChatResponse:
     """Process a message and return response. Image/Text models are loaded on demand when needed."""
     try:
@@ -300,36 +302,41 @@ async def process_message(
                 video_type = result["parameters"].get("video_type", "promotional")
                 use_reference_image = result["parameters"].get("use_reference_image", False)
                 try:
+                    qm = quality_mode or "balanced"
                     if image_bytes:
                         # User attached an image — always use it
-                        print(f"DEBUG: Routing to I2V (image attached)")
+                        print(f"DEBUG: Routing to I2V (image attached, quality={qm})")
                         video_data = await video_generator.generate_i2v(
                             prompt=description,
                             image_bytes=image_bytes,
                             video_type=video_type,
+                            quality_mode=qm,
                         )
                     elif use_reference_image:
                         # User referred to a previous image — fetch latest from DB
-                        print(f"DEBUG: Routing to I2V (reference image from history)")
+                        print(f"DEBUG: Routing to I2V (reference image from history, quality={qm})")
                         ref_image_bytes = await _fetch_latest_image_from_chat(db_client, chat_id)
                         if ref_image_bytes:
                             video_data = await video_generator.generate_i2v(
                                 prompt=description,
                                 image_bytes=ref_image_bytes,
                                 video_type=video_type,
+                                quality_mode=qm,
                             )
                         else:
                             print(f"DEBUG: No reference image found, falling back to T2V")
                             video_data = await video_generator.generate_t2v(
                                 prompt=description,
                                 video_type=video_type,
+                                quality_mode=qm,
                             )
                     else:
                         # Pure text-to-video
-                        print(f"DEBUG: Routing to T2V (no image)")
+                        print(f"DEBUG: Routing to T2V (no image, quality={qm})")
                         video_data = await video_generator.generate_t2v(
                             prompt=description,
                             video_type=video_type,
+                            quality_mode=qm,
                         )
                     try:
                         s3_url = await storage_service.store_generated_image(video_data, description)
@@ -661,6 +668,7 @@ async def send_message(
             request.current_city,
             request.current_lat,
             request.current_lon,
+            request.quality_mode,
         )
 
     except HTTPException:

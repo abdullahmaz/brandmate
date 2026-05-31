@@ -2,6 +2,10 @@
 
 An intelligent AI platform that automates end-to-end brand marketing for Eastern clothing brands using advanced LLM orchestration and multimodal AI tools. Brandmate understands natural language requests and automatically generates marketing assets, visual content, and brand materials tailored specifically for Eastern clothing brands.
 
+## 🎥 Demo
+
+Watch Brandmate in action: [Video Demo](https://drive.google.com/file/d/1nXBfCvq89REMfx3ikYDEu-HMGZO4AiB9/view?usp=drive_link)
+
 ## 🌟 Features
 
 - **🤖 Intelligent Chat Interface**: Claude-like conversational AI for natural brand asset requests
